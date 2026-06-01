@@ -2,6 +2,7 @@
 
 mod commands;
 mod document;
+mod linkedin;
 mod llm;
 mod ollama;
 mod scraper;
@@ -32,6 +33,7 @@ fn main() {
             commands::delete_cv,
             commands::extract_profile_from_cv,
             commands::extract_profile_from_linkedin,
+            commands::extract_profile_from_linkedin_url,
             // Jobs
             commands::list_jobs,
             commands::add_job,

@@ -111,6 +111,10 @@ export async function extractProfileFromLinkedin(text: string): Promise<Profile>
   return invoke('extract_profile_from_linkedin', { text });
 }
 
+export async function extractProfileFromLinkedinUrl(url: string): Promise<Profile> {
+  return invoke('extract_profile_from_linkedin_url', { url });
+}
+
 // ─── Jobs ──────────────────────────────────────────────────────────
 
 export async function listJobs(): Promise<JobOffer[]> {

@@ -2,10 +2,10 @@ import { useState, useEffect } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
 import {
   getProfile, saveProfile, resetProfile,
-  uploadCv, listCvs, deleteCv, extractProfileFromCv, extractProfileFromLinkedin,
+  uploadCv, listCvs, deleteCv, extractProfileFromCv, extractProfileFromLinkedin, extractProfileFromLinkedinUrl,
   type Profile, type CvInfo
 } from '../services/api';
-import { Save, Loader2, Upload, Sparkles, User, Trash2, FileText, X, AlertTriangle, Linkedin } from 'lucide-react';
+import { Save, Loader2, Upload, Sparkles, User, Trash2, FileText, X, AlertTriangle, Linkedin, Link, ClipboardPaste } from 'lucide-react';
 
 export default function ProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -17,7 +17,9 @@ export default function ProfilePage() {
   const [message, setMessage] = useState('');
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [linkedinUrl, setLinkedinUrl] = useState('');
+  const [linkedinText, setLinkedinText] = useState('');
   const [linkedinLoading, setLinkedinLoading] = useState(false);
+  const [linkedinMode, setLinkedinMode] = useState<'url' | 'text'>('url');
 
   useEffect(() => {
     getProfile().then(setProfile).catch(() => {});
@@ -98,14 +100,22 @@ export default function ProfilePage() {
   }
 
   async function handleLinkedinExtract() {
-    if (!linkedinUrl.trim()) return;
     setLinkedinLoading(true);
-    setMessage('Extracting profile info with AI...');
     try {
-      const extracted = await extractProfileFromLinkedin(linkedinUrl.trim());
+      let extracted: Profile;
+      if (linkedinMode === 'url') {
+        if (!linkedinUrl.trim()) return;
+        setMessage('Fetching LinkedIn profile using browser session...');
+        extracted = await extractProfileFromLinkedinUrl(linkedinUrl.trim());
+        setLinkedinUrl('');
+      } else {
+        if (!linkedinText.trim()) return;
+        setMessage('Extracting profile info with AI...');
+        extracted = await extractProfileFromLinkedin(linkedinText.trim());
+        setLinkedinText('');
+      }
       setProfile(extracted);
-      setMessage('Profile updated from LinkedIn text!');
-      setLinkedinUrl('');
+      setMessage('Profile updated from LinkedIn!');
       setTimeout(() => setMessage(''), 4000);
     } catch (e) {
       setMessage(`Extraction error: ${e}`);
@@ -234,27 +244,68 @@ export default function ProfilePage() {
 
       {/* ─── LinkedIn Import ─── */}
       <div className="bg-navy-800 rounded-xl border border-navy-700 p-5 mb-6">
-        <div className="flex items-center gap-2 mb-3">
-          <Linkedin size={16} className="text-blue-400" />
-          <h2 className="text-sm font-semibold text-white">Import from LinkedIn</h2>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Linkedin size={16} className="text-blue-400" />
+            <h2 className="text-sm font-semibold text-white">Import from LinkedIn</h2>
+          </div>
+          <div className="flex bg-navy-900 rounded-lg border border-navy-600 p-0.5">
+            <button
+              onClick={() => setLinkedinMode('url')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${linkedinMode === 'url' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-300'}`}
+            >
+              <Link size={11} />
+              URL
+            </button>
+            <button
+              onClick={() => setLinkedinMode('text')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${linkedinMode === 'text' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-300'}`}
+            >
+              <ClipboardPaste size={11} />
+              Paste Text
+            </button>
+          </div>
         </div>
-        <p className="text-xs text-gray-500 mb-3">
-          Go to your LinkedIn profile, select all text (Ctrl+A), copy it (Ctrl+C), and paste it below. Or use LinkedIn's "Save to PDF" and upload it as a document above.
-        </p>
-        <textarea
-          value={linkedinUrl}
-          onChange={e => setLinkedinUrl(e.target.value)}
-          placeholder="Paste your LinkedIn profile text here... (go to your profile page, Ctrl+A, Ctrl+C, then paste here)"
-          rows={4}
-          className="w-full bg-navy-900 border border-navy-600 rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500 mb-3"
-        />
+
+        {linkedinMode === 'url' ? (
+          <>
+            <p className="text-xs text-gray-500 mb-3">
+              Enter your LinkedIn profile URL. The app will use your browser session (Chrome/Edge) to fetch the profile automatically.
+            </p>
+            <input
+              type="text"
+              value={linkedinUrl}
+              onChange={e => setLinkedinUrl(e.target.value)}
+              placeholder="https://www.linkedin.com/in/your-username"
+              className="w-full bg-navy-900 border border-navy-600 rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500 mb-3"
+              onKeyDown={e => e.key === 'Enter' && handleLinkedinExtract()}
+            />
+            <p className="text-[11px] text-gray-600 mb-3">
+              Requires being logged into LinkedIn in Chrome or Edge.
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="text-xs text-gray-500 mb-3">
+              Go to your LinkedIn profile, select all text (Ctrl+A), copy it (Ctrl+C), and paste it below.
+            </p>
+            <textarea
+              value={linkedinText}
+              onChange={e => setLinkedinText(e.target.value)}
+              placeholder="Paste your LinkedIn profile text here..."
+              rows={4}
+              className="w-full bg-navy-900 border border-navy-600 rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500 mb-3"
+            />
+          </>
+        )}
+
         <button
           onClick={handleLinkedinExtract}
-          disabled={linkedinLoading || !linkedinUrl.trim()}
+          disabled={linkedinLoading || (linkedinMode === 'url' ? !linkedinUrl.trim() : !linkedinText.trim())}
           className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 text-xs font-medium transition-colors"
         >
           {linkedinLoading ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
-          {linkedinLoading ? 'Extracting...' : 'Extract Profile from Text'}
+          {linkedinLoading ? 'Extracting...' : linkedinMode === 'url' ? 'Fetch & Extract Profile' : 'Extract Profile from Text'}
         </button>
       </div>
 

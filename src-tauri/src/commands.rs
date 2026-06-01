@@ -466,6 +466,124 @@ CRITICAL: Return ONLY the JSON. No explanation."#,
     Ok(profile)
 }
 
+/// Extract profile from a LinkedIn URL using browser cookies for authentication
+#[tauri::command]
+pub async fn extract_profile_from_linkedin_url(state: State<'_, AppState>, url: String) -> Result<Profile, String> {
+    use crate::linkedin;
+
+    let ollama_url = state.ollama_url.read().await.clone();
+    let model = state.llm_model.read().await.clone();
+    let client = Client::new();
+
+    // Validate URL
+    if !url.contains("linkedin.com/in/") {
+        return Err("Please provide a valid LinkedIn profile URL (e.g., https://www.linkedin.com/in/username)".to_string());
+    }
+
+    // Get li_at cookie from browser
+    let li_at = linkedin::get_linkedin_cookie()?;
+
+    // Fetch the profile page
+    let html = linkedin::fetch_linkedin_profile(&url, &li_at).await?;
+
+    // Extract text from HTML
+    let clean_text = linkedin::extract_text_from_html(&html);
+
+    if clean_text.len() < 100 {
+        return Err("Could not extract enough text from the LinkedIn profile. The page may be empty or require different permissions.".to_string());
+    }
+
+    let prompt = format!(
+        r#"Extract professional information from this LinkedIn profile page content. Return ONLY valid JSON.
+
+LINKEDIN PROFILE TEXT:
+{}
+
+The LinkedIn profile URL is: {}
+
+INSTRUCTIONS:
+- "name": Full name of the person
+- "title": Their headline/current position
+- "linkedin_url": Use the URL provided above
+- "key_skills": Extract ALL skills, technologies, tools, areas of expertise mentioned. Be very thorough (aim for 10-20+ skills).
+- "years_experience": Calculate from work experience dates. Can be decimal (0.5 = 6 months)
+- "summary": Their About section or a summary based on their experience
+- "languages": Spoken languages listed
+- Use proper accents and special characters (á, é, í, ó, ú, ñ, ü, ç)
+
+Return this exact JSON:
+{{
+  "name": "",
+  "email": "",
+  "phone": "",
+  "linkedin_url": "{}",
+  "location": "",
+  "title": "",
+  "summary": "",
+  "key_skills": [],
+  "years_experience": 0,
+  "languages": []
+}}
+
+CRITICAL: Return ONLY the JSON. No explanation."#,
+        &clean_text[..clean_text.len().min(8000)],
+        url,
+        url
+    );
+
+    let messages = vec![
+        ChatMessage { role: "system".to_string(), content: "You parse LinkedIn profiles into structured data. Return ONLY valid JSON with proper Unicode characters (accents, ñ, etc). Be very thorough extracting skills.".to_string() },
+        ChatMessage { role: "user".to_string(), content: prompt },
+    ];
+
+    let response = chat_completion(&client, &ollama_url, &model, messages, 0.1).await?;
+
+    let clean = response.trim().trim_start_matches("```json").trim_start_matches("```").trim_end_matches("```").trim();
+    
+    let extracted: serde_json::Value = serde_json::from_str(clean)
+        .map_err(|e| format!("Failed to parse AI response: {e}\nRaw: {clean}"))?;
+
+    let current_profile = state.profile.read().await.clone();
+    
+    let profile = Profile {
+        name: extracted["name"].as_str().unwrap_or("").to_string(),
+        email: if extracted["email"].as_str().unwrap_or("").is_empty() { current_profile.email.clone() } else { extracted["email"].as_str().unwrap_or("").to_string() },
+        phone: if extracted["phone"].as_str().unwrap_or("").is_empty() { current_profile.phone.clone() } else { extracted["phone"].as_str().unwrap_or("").to_string() },
+        linkedin_url: extracted["linkedin_url"].as_str().unwrap_or("").to_string(),
+        location: extracted["location"].as_str().unwrap_or("").to_string(),
+        title: extracted["title"].as_str().unwrap_or("").to_string(),
+        summary: extracted["summary"].as_str().unwrap_or("").to_string(),
+        key_skills: {
+            let mut skills: Vec<String> = extracted["key_skills"].as_array()
+                .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                .unwrap_or_default();
+            // Merge with existing skills
+            for s in &current_profile.key_skills {
+                if !skills.contains(s) {
+                    skills.push(s.clone());
+                }
+            }
+            skills
+        },
+        years_experience: extracted["years_experience"].as_f64().unwrap_or(0.0) as f32,
+        languages: extracted["languages"].as_array()
+            .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+            .unwrap_or_default(),
+        preferred_language: if current_profile.preferred_language.is_empty() { "es".to_string() } else { current_profile.preferred_language },
+        tone: if current_profile.tone.is_empty() { "professional".to_string() } else { current_profile.tone },
+    };
+
+    // Auto-save
+    let data_dir = state.data_dir.read().await.clone();
+    let path = data_dir.join("profile.json");
+    let json = serde_json::to_string_pretty(&profile).map_err(|e| e.to_string())?;
+    fs::write(&path, &json).map_err(|e| format!("Failed to save profile: {e}"))?;
+
+    *state.profile.write().await = profile.clone();
+
+    Ok(profile)
+}
+
 // ─── Jobs ──────────────────────────────────────────────────────────────────────
 
 #[tauri::command]
