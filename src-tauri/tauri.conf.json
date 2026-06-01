@@ -9,11 +9,17 @@
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build"
   },
+  "bundle": {
+    "icon": [
+      "icons/icon.ico",
+      "icons/icon.png"
+    ]
+  },
   "app": {
     "windows": [
       {
         "label": "main",
-        "title": "JobPilot - AI Job Application Assistant",
+        "title": "JobPilot",
         "width": 1280,
         "height": 860,
         "resizable": true,
