@@ -367,64 +367,40 @@ CRITICAL: Return ONLY the JSON object. No markdown, no explanation."#,
     Ok(profile)
 }
 
-/// Extract profile from a LinkedIn profile URL
+/// Extract profile from pasted LinkedIn profile text
 #[tauri::command]
-pub async fn extract_profile_from_linkedin(state: State<'_, AppState>, url: String) -> Result<Profile, String> {
+pub async fn extract_profile_from_linkedin(state: State<'_, AppState>, text: String) -> Result<Profile, String> {
     let ollama_url = state.ollama_url.read().await.clone();
     let model = state.llm_model.read().await.clone();
     let client = Client::new();
 
-    // Scrape the LinkedIn profile page
-    let resp = client
-        .get(&url)
-        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-        .header("Accept-Language", "es-ES,es;q=0.9,en;q=0.8")
-        .send()
-        .await
-        .map_err(|e| format!("Failed to fetch LinkedIn: {e}"))?;
-
-    let html = resp.text().await.map_err(|e| format!("Failed to read response: {e}"))?;
-
-    // Parse HTML and extract text content (scoped to drop non-Send types before await)
-    let clean_text = {
-        let document = scraper::Html::parse_document(&html);
-        let text_selector = scraper::Selector::parse("body").unwrap();
-        let body_text: String = document
-            .select(&text_selector)
-            .flat_map(|el| el.text())
-            .collect::<Vec<_>>()
-            .join(" ");
-
-        body_text.split_whitespace().collect::<Vec<_>>().join(" ")
-    };
-
-    if clean_text.len() < 100 {
-        return Err("Could not extract enough text from LinkedIn profile. The page may require login.".to_string());
+    if text.trim().len() < 50 {
+        return Err("Not enough text. Copy all the text from your LinkedIn profile page and paste it here.".to_string());
     }
 
+    let clean_text = text.trim().to_string();
+
     let prompt = format!(
-        r#"Extract professional information from this LinkedIn profile page content. Return ONLY valid JSON.
+        r#"Extract professional information from this LinkedIn profile text. Return ONLY valid JSON.
 
 LINKEDIN PROFILE TEXT:
 {}
 
-The LinkedIn profile URL is: {}
-
 INSTRUCTIONS:
 - "title": Their headline/current position
-- "linkedin_url": Use the URL provided above
-- "key_skills": Extract ALL skills, technologies, tools mentioned
-- "years_experience": Calculate from work experience. Can be decimal (0.5 = 6 months)
+- "linkedin_url": If you find a linkedin.com URL in the text, use it. Otherwise leave empty "".
+- "key_skills": Extract ALL skills, technologies, tools, areas of expertise mentioned. Be thorough.
+- "years_experience": Calculate from work experience dates. Can be decimal (0.5 = 6 months)
 - "summary": Their About section or a summary based on their experience
 - "languages": Spoken languages listed
-- Use proper accents (á, é, í, ó, ú, ñ)
+- Use proper accents and special characters (á, é, í, ó, ú, ñ, ü, ç)
 
 Return this exact JSON:
 {{
   "name": "",
   "email": "",
   "phone": "",
-  "linkedin_url": "{}",
+  "linkedin_url": "",
   "location": "",
   "title": "",
   "summary": "",
@@ -434,13 +410,11 @@ Return this exact JSON:
 }}
 
 CRITICAL: Return ONLY the JSON. No explanation."#,
-        &clean_text[..clean_text.len().min(6000)],
-        url,
-        url
+        &clean_text[..clean_text.len().min(8000)]
     );
 
     let messages = vec![
-        ChatMessage { role: "system".to_string(), content: "You parse LinkedIn profiles into structured data. Return ONLY valid JSON with proper Unicode.".to_string() },
+        ChatMessage { role: "system".to_string(), content: "You parse LinkedIn profiles into structured data. Return ONLY valid JSON with proper Unicode characters (accents, ñ, etc). Be very thorough extracting skills.".to_string() },
         ChatMessage { role: "user".to_string(), content: prompt },
     ];
 

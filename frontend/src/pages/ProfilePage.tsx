@@ -100,15 +100,15 @@ export default function ProfilePage() {
   async function handleLinkedinExtract() {
     if (!linkedinUrl.trim()) return;
     setLinkedinLoading(true);
-    setMessage('Scraping LinkedIn profile and extracting with AI...');
+    setMessage('Extracting profile info with AI...');
     try {
       const extracted = await extractProfileFromLinkedin(linkedinUrl.trim());
       setProfile(extracted);
-      setMessage('Profile updated from LinkedIn!');
+      setMessage('Profile updated from LinkedIn text!');
       setLinkedinUrl('');
       setTimeout(() => setMessage(''), 4000);
     } catch (e) {
-      setMessage(`LinkedIn extraction error: ${e}`);
+      setMessage(`Extraction error: ${e}`);
     } finally {
       setLinkedinLoading(false);
     }
@@ -239,25 +239,23 @@ export default function ProfilePage() {
           <h2 className="text-sm font-semibold text-white">Import from LinkedIn</h2>
         </div>
         <p className="text-xs text-gray-500 mb-3">
-          Paste your LinkedIn profile URL to extract skills, experience, and info automatically.
+          Go to your LinkedIn profile, select all text (Ctrl+A), copy it (Ctrl+C), and paste it below. Or use LinkedIn's "Save to PDF" and upload it as a document above.
         </p>
-        <div className="flex gap-2">
-          <input
-            type="url"
-            value={linkedinUrl}
-            onChange={e => setLinkedinUrl(e.target.value)}
-            placeholder="https://www.linkedin.com/in/your-profile"
-            className="flex-1 bg-navy-900 border border-navy-600 rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500"
-          />
-          <button
-            onClick={handleLinkedinExtract}
-            disabled={linkedinLoading || !linkedinUrl.trim()}
-            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 text-xs font-medium transition-colors shrink-0"
-          >
-            {linkedinLoading ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
-            {linkedinLoading ? 'Extracting...' : 'Import'}
-          </button>
-        </div>
+        <textarea
+          value={linkedinUrl}
+          onChange={e => setLinkedinUrl(e.target.value)}
+          placeholder="Paste your LinkedIn profile text here... (go to your profile page, Ctrl+A, Ctrl+C, then paste here)"
+          rows={4}
+          className="w-full bg-navy-900 border border-navy-600 rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500 mb-3"
+        />
+        <button
+          onClick={handleLinkedinExtract}
+          disabled={linkedinLoading || !linkedinUrl.trim()}
+          className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 text-xs font-medium transition-colors"
+        >
+          {linkedinLoading ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+          {linkedinLoading ? 'Extracting...' : 'Extract Profile from Text'}
+        </button>
       </div>
 
       {/* ─── Profile Form ─── */}
