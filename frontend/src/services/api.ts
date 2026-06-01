@@ -81,6 +81,10 @@ export async function saveProfile(profile: Profile): Promise<Profile> {
   return invoke('save_profile', { profile });
 }
 
+export async function resetProfile(): Promise<void> {
+  return invoke('reset_profile');
+}
+
 // ─── CVs ───────────────────────────────────────────────────────────
 
 export async function listCvs(): Promise<CvInfo[]> {
@@ -93,6 +97,10 @@ export async function uploadCv(path: string): Promise<CvInfo> {
 
 export async function getCvContent(filename: string): Promise<string> {
   return invoke('get_cv_content', { filename });
+}
+
+export async function deleteCv(filename: string): Promise<void> {
+  return invoke('delete_cv', { filename });
 }
 
 export async function extractProfileFromCv(filename: string): Promise<Profile> {

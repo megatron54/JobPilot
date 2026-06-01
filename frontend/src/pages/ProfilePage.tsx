@@ -1,7 +1,11 @@
 import { useState, useEffect } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
-import { getProfile, saveProfile, uploadCv, listCvs, extractProfileFromCv, type Profile, type CvInfo } from '../services/api';
-import { Save, Loader2, Upload, Sparkles, User } from 'lucide-react';
+import {
+  getProfile, saveProfile, resetProfile,
+  uploadCv, listCvs, deleteCv, extractProfileFromCv,
+  type Profile, type CvInfo
+} from '../services/api';
+import { Save, Loader2, Upload, Sparkles, User, Trash2, FileText, X, AlertTriangle } from 'lucide-react';
 
 export default function ProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -11,6 +15,7 @@ export default function ProfilePage() {
   const [extracting, setExtracting] = useState(false);
   const [skillInput, setSkillInput] = useState('');
   const [message, setMessage] = useState('');
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   useEffect(() => {
     getProfile().then(setProfile).catch(() => {});
@@ -30,41 +35,61 @@ export default function ProfilePage() {
     }
   }
 
-  async function handleUploadAndExtract() {
-    const selected = await open({
-      multiple: false,
-      filters: [{ name: 'CV Files', extensions: ['pdf', 'docx', 'doc', 'txt', 'md'] }],
-    });
-    if (!selected) return;
-    
+  async function handleResetProfile() {
     try {
-      setMessage('Uploading CV...');
-      const cv = await uploadCv(selected as string);
-      setCvs(await listCvs());
-      
-      setMessage('Extracting profile with AI... This may take a moment.');
-      setExtracting(true);
-      const extracted = await extractProfileFromCv(cv.filename);
-      setProfile(extracted);
-      setMessage('Profile auto-filled from your CV!');
-      setTimeout(() => setMessage(''), 4000);
+      await resetProfile();
+      setProfile({
+        name: '', email: '', phone: '', linkedin_url: '', location: '',
+        title: '', summary: '', key_skills: [], years_experience: 0,
+        languages: [], preferred_language: 'es', tone: 'professional',
+      });
+      setShowResetConfirm(false);
+      setMessage('Profile cleared.');
+      setTimeout(() => setMessage(''), 3000);
     } catch (e) {
       setMessage(`Error: ${e}`);
-    } finally {
-      setExtracting(false);
     }
   }
 
-  async function handleExtractFromExisting(filename: string) {
+  async function handleUploadDoc() {
+    const selected = await open({
+      multiple: true,
+      filters: [{ name: 'Documents', extensions: ['pdf', 'docx', 'doc', 'txt', 'md'] }],
+    });
+    if (!selected) return;
+
+    const files = Array.isArray(selected) ? selected : [selected];
+    for (const file of files) {
+      try {
+        await uploadCv(file as string);
+      } catch (e) {
+        setMessage(`Error uploading: ${e}`);
+      }
+    }
+    setCvs(await listCvs());
+    setMessage(`${files.length} document(s) uploaded.`);
+    setTimeout(() => setMessage(''), 3000);
+  }
+
+  async function handleDeleteCv(filename: string) {
+    try {
+      await deleteCv(filename);
+      setCvs(await listCvs());
+    } catch (e) {
+      setMessage(`Error: ${e}`);
+    }
+  }
+
+  async function handleExtract(filename: string) {
     setExtracting(true);
     setMessage('Extracting profile with AI...');
     try {
       const extracted = await extractProfileFromCv(filename);
       setProfile(extracted);
-      setMessage('Profile auto-filled!');
+      setMessage('Profile auto-filled from CV!');
       setTimeout(() => setMessage(''), 4000);
     } catch (e) {
-      setMessage(`Error: ${e}`);
+      setMessage(`Extraction error: ${e}`);
     } finally {
       setExtracting(false);
     }
@@ -84,61 +109,111 @@ export default function ProfilePage() {
   if (!profile) return <div className="p-8 text-gray-400">Loading...</div>;
 
   return (
-    <div className="p-8 max-w-3xl">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white mb-1">Profile & CV</h1>
-        <p className="text-sm text-gray-400">
-          Upload your CV to auto-fill your profile, or edit manually. This info personalizes all generated content.
-        </p>
+    <div className="p-8 max-w-4xl">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-white mb-1">Profile & Documents</h1>
+          <p className="text-sm text-gray-400">
+            Upload CVs and relevant documents to give the AI context about you.
+          </p>
+        </div>
+        <button
+          onClick={() => setShowResetConfirm(true)}
+          className="flex items-center gap-2 text-xs text-gray-500 hover:text-red-400 border border-navy-600 px-3 py-1.5 rounded-lg hover:border-red-500/30 transition-colors"
+        >
+          <Trash2 size={12} />
+          Reset Profile
+        </button>
       </div>
 
-      {/* AI Extract section */}
-      <div className="bg-gradient-to-r from-blue-600/10 to-purple-600/10 border border-blue-500/20 rounded-xl p-5 mb-6">
-        <div className="flex items-start justify-between">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <Sparkles size={16} className="text-blue-400" />
-              <h3 className="font-semibold text-white text-sm">AI Profile Extraction</h3>
-            </div>
-            <p className="text-xs text-gray-400">Upload a CV and AI will automatically extract your name, skills, experience, and more.</p>
+      {/* Reset confirmation */}
+      {showResetConfirm && (
+        <div className="mb-4 bg-red-500/10 border border-red-500/30 rounded-lg p-4 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-red-400 text-sm">
+            <AlertTriangle size={16} />
+            Are you sure? This will delete all profile data.
+          </div>
+          <div className="flex gap-2">
+            <button onClick={handleResetProfile} className="bg-red-600 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-red-700">
+              Yes, delete
+            </button>
+            <button onClick={() => setShowResetConfirm(false)} className="text-gray-400 text-xs px-3 py-1.5 rounded-lg hover:text-white border border-navy-600">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {message && (
+        <div className="mb-4 bg-blue-500/10 border border-blue-500/30 text-blue-400 px-4 py-3 rounded-lg text-sm flex items-center gap-2">
+          {extracting && <Loader2 size={14} className="animate-spin" />}
+          {message}
+        </div>
+      )}
+
+      {/* ─── Documents Section ─── */}
+      <div className="bg-navy-800 rounded-xl border border-navy-700 p-5 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <FileText size={16} className="text-blue-400" />
+            <h2 className="text-sm font-semibold text-white">My Documents</h2>
+            <span className="text-xs text-gray-500">({cvs.length})</span>
           </div>
           <button
-            onClick={handleUploadAndExtract}
-            disabled={extracting}
-            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm shrink-0 transition-colors"
+            onClick={handleUploadDoc}
+            className="flex items-center gap-2 bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 text-xs font-medium transition-colors"
           >
-            {extracting ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-            {extracting ? 'Extracting...' : 'Upload & Extract'}
+            <Upload size={13} />
+            Upload Documents
           </button>
         </div>
 
-        {cvs.length > 0 && (
-          <div className="mt-3 pt-3 border-t border-navy-700">
-            <p className="text-xs text-gray-500 mb-2">Or extract from an existing CV:</p>
-            <div className="flex flex-wrap gap-2">
-              {cvs.map(cv => (
-                <button
-                  key={cv.filename}
-                  onClick={() => handleExtractFromExisting(cv.filename)}
-                  disabled={extracting}
-                  className="text-xs bg-navy-800 border border-navy-600 text-gray-300 px-2.5 py-1.5 rounded-lg hover:border-blue-500/50 hover:text-blue-400 disabled:opacity-50 transition-colors"
-                >
-                  {cv.filename}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        <p className="text-xs text-gray-500 mb-3">
+          Upload CVs, cover letter examples, portfolio descriptions, certifications — anything that gives context about you.
+        </p>
 
-        {message && (
-          <div className="mt-3 text-sm text-blue-400 flex items-center gap-2">
-            {extracting && <Loader2 size={12} className="animate-spin" />}
-            {message}
+        {cvs.length > 0 ? (
+          <div className="space-y-2">
+            {cvs.map(cv => (
+              <div key={cv.filename} className="flex items-center justify-between bg-navy-900 border border-navy-700 rounded-lg px-4 py-2.5 group">
+                <div className="flex items-center gap-3">
+                  <FileText size={15} className="text-blue-400/70" />
+                  <div>
+                    <p className="text-sm text-gray-200">{cv.filename}</p>
+                    <p className="text-[11px] text-gray-500">{Math.round(cv.char_count / 1000)}k characters extracted</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={() => handleExtract(cv.filename)}
+                    disabled={extracting}
+                    className="flex items-center gap-1 text-[11px] text-blue-400 hover:text-blue-300 px-2 py-1 rounded border border-blue-500/30 hover:bg-blue-600/10 disabled:opacity-50"
+                    title="Extract profile from this document"
+                  >
+                    <Sparkles size={11} />
+                    Extract
+                  </button>
+                  <button
+                    onClick={() => handleDeleteCv(cv.filename)}
+                    className="text-gray-600 hover:text-red-400 p-1 rounded hover:bg-red-500/10 transition-colors"
+                    title="Delete document"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8 border border-dashed border-navy-600 rounded-lg">
+            <Upload size={24} className="mx-auto mb-2 text-gray-600" />
+            <p className="text-sm text-gray-500">No documents yet</p>
+            <p className="text-xs text-gray-600 mt-1">PDF, DOCX, TXT, MD supported</p>
           </div>
         )}
       </div>
 
-      {/* Profile form */}
+      {/* ─── Profile Form ─── */}
       <div className="bg-navy-800 rounded-xl border border-navy-700 p-6 space-y-5">
         <div className="flex items-center gap-2 mb-2">
           <User size={16} className="text-gray-400" />

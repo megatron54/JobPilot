@@ -24,10 +24,12 @@ fn main() {
             // Profile
             commands::get_profile,
             commands::save_profile,
+            commands::reset_profile,
             // CVs
             commands::list_cvs,
             commands::upload_cv,
             commands::get_cv_content,
+            commands::delete_cv,
             commands::extract_profile_from_cv,
             // Jobs
             commands::list_jobs,

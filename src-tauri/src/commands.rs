@@ -232,6 +232,47 @@ pub async fn get_cv_content(state: State<'_, AppState>, filename: String) -> Res
         .ok_or_else(|| format!("CV not found: {filename}"))
 }
 
+#[tauri::command]
+pub async fn delete_cv(state: State<'_, AppState>, filename: String) -> Result<(), String> {
+    let data_dir = state.data_dir.read().await.clone();
+    let cvs_dir = data_dir.join("cvs");
+
+    // Remove the file
+    let file_path = cvs_dir.join(&filename);
+    if file_path.exists() {
+        fs::remove_file(&file_path).map_err(|e| format!("Failed to delete file: {e}"))?;
+    }
+
+    // Remove the extracted .txt
+    let txt_path = cvs_dir.join(format!("{}.txt", filename));
+    if txt_path.exists() {
+        let _ = fs::remove_file(&txt_path);
+    }
+
+    // Remove from state
+    let mut cvs = state.cvs.write().await;
+    cvs.remove(&filename);
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn reset_profile(state: State<'_, AppState>) -> Result<(), String> {
+    let data_dir = state.data_dir.read().await.clone();
+    let path = data_dir.join("profile.json");
+
+    // Delete from disk
+    if path.exists() {
+        fs::remove_file(&path).map_err(|e| format!("Failed to delete profile: {e}"))?;
+    }
+
+    // Reset state to default
+    let mut profile = state.profile.write().await;
+    *profile = Profile::default();
+
+    Ok(())
+}
+
 /// Extract profile information from a CV using AI
 #[tauri::command]
 pub async fn extract_profile_from_cv(state: State<'_, AppState>, filename: String) -> Result<Profile, String> {
