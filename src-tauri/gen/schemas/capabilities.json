@@ -1,0 +1,1 @@
+{"main-capability":{"identifier":"main-capability","description":"Main window capability","local":true,"windows":["main"],"permissions":["core:default","dialog:default","dialog:allow-open","fs:default","fs:allow-read-file","shell:default","shell:allow-open"]}}
