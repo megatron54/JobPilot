@@ -482,7 +482,7 @@ pub async fn add_job(state: State<'_, AppState>, request: AddJobRequest) -> Resu
     let mut company = request.company.unwrap_or_default();
     let mut position = request.position.unwrap_or_default();
     let location = request.location.unwrap_or_default();
-    let mut url = request.url.unwrap_or_default();
+    let url = request.url.unwrap_or_default();
     let mut source = "manual".to_string();
 
     // If URL provided but no description, scrape it

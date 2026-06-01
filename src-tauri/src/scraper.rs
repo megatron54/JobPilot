@@ -53,6 +53,7 @@ pub struct ScrapedJob {
     pub title: String,
     pub company: String,
     pub source: String,
+    #[allow(dead_code)]
     pub url: String,
 }
 
