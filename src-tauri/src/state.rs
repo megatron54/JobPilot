@@ -26,7 +26,7 @@ pub struct Profile {
     pub title: String,
     pub summary: String,
     pub key_skills: Vec<String>,
-    pub years_experience: u32,
+    pub years_experience: f32,
     pub languages: Vec<String>,
     pub preferred_language: String,
     pub tone: String,

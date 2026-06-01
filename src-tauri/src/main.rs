@@ -31,6 +31,7 @@ fn main() {
             commands::get_cv_content,
             commands::delete_cv,
             commands::extract_profile_from_cv,
+            commands::extract_profile_from_linkedin,
             // Jobs
             commands::list_jobs,
             commands::add_job,

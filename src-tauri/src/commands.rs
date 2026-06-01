@@ -1,7 +1,7 @@
 use crate::document::{extract_text, SUPPORTED_EXTENSIONS};
 use crate::llm::{chat_completion, stream_chat, ChatMessage};
 use crate::ollama;
-use crate::scraper;
+use crate::scraper as job_scraper;
 use crate::state::{AppState, JobOffer, Profile};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -287,11 +287,21 @@ pub async fn extract_profile_from_cv(state: State<'_, AppState>, filename: Strin
     drop(cvs);
 
     let prompt = format!(
-        r#"Extract personal and professional information from this CV and return ONLY valid JSON (no other text):
+        r#"Analyze this CV/resume thoroughly and extract ALL information. Return ONLY valid JSON.
 
+CV TEXT:
 {}
 
-Return this exact JSON structure (fill in what you find, leave empty string "" if not found):
+INSTRUCTIONS:
+- "title": The person's current professional title or degree/specialization (e.g. "Ingeniero de Telecomunicaciones", "Full Stack Developer"). Look at the header or first section.
+- "linkedin_url": Extract the ACTUAL URL (https://linkedin.com/in/...), NOT the display text. If you only see the word "LinkedIn" as a link, leave empty "".
+- "key_skills": Extract ALL technical and soft skills mentioned anywhere in the CV. Include programming languages, frameworks, tools, methodologies, certifications, areas of expertise. Be thorough - list at least 10-15 if present.
+- "years_experience": Can be decimal (e.g. 0.5 for 6 months). If the person is a student with internships, use 0.5-1. Calculate from work experience dates if possible.
+- "summary": Write a 2-3 sentence professional summary based on the CV content. Use the SAME language as the CV.
+- "languages": Spoken languages (e.g. ["Español", "English", "Français"])
+- Use proper accents and special characters (á, é, í, ó, ú, ñ, ü, ç)
+
+Return this exact JSON structure:
 {{
   "name": "",
   "email": "",
@@ -305,12 +315,12 @@ Return this exact JSON structure (fill in what you find, leave empty string "" i
   "languages": []
 }}
 
-IMPORTANT: Return ONLY the JSON, nothing else."#,
-        &cv_text[..cv_text.len().min(4000)]
+CRITICAL: Return ONLY the JSON object. No markdown, no explanation."#,
+        &cv_text[..cv_text.len().min(6000)]
     );
 
     let messages = vec![
-        ChatMessage { role: "system".to_string(), content: "You extract structured data from CVs. Return ONLY valid JSON.".to_string() },
+        ChatMessage { role: "system".to_string(), content: "You are a CV parser. Extract structured data from resumes. Return ONLY valid JSON with proper Unicode characters (accents, ñ, etc). Be thorough with skills extraction.".to_string() },
         ChatMessage { role: "user".to_string(), content: prompt },
     ];
 
@@ -336,7 +346,7 @@ IMPORTANT: Return ONLY the JSON, nothing else."#,
         key_skills: extracted["key_skills"].as_array()
             .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
             .unwrap_or_default(),
-        years_experience: extracted["years_experience"].as_u64().unwrap_or(0) as u32,
+        years_experience: extracted["years_experience"].as_f64().unwrap_or(0.0) as f32,
         languages: extracted["languages"].as_array()
             .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
             .unwrap_or_default(),
@@ -352,6 +362,131 @@ IMPORTANT: Return ONLY the JSON, nothing else."#,
     fs::write(&path, &json).map_err(|e| format!("Failed to save profile: {e}"))?;
 
     // Update state
+    *state.profile.write().await = profile.clone();
+
+    Ok(profile)
+}
+
+/// Extract profile from a LinkedIn profile URL
+#[tauri::command]
+pub async fn extract_profile_from_linkedin(state: State<'_, AppState>, url: String) -> Result<Profile, String> {
+    let ollama_url = state.ollama_url.read().await.clone();
+    let model = state.llm_model.read().await.clone();
+    let client = Client::new();
+
+    // Scrape the LinkedIn profile page
+    let resp = client
+        .get(&url)
+        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        .header("Accept-Language", "es-ES,es;q=0.9,en;q=0.8")
+        .send()
+        .await
+        .map_err(|e| format!("Failed to fetch LinkedIn: {e}"))?;
+
+    let html = resp.text().await.map_err(|e| format!("Failed to read response: {e}"))?;
+
+    // Parse HTML and extract text content (scoped to drop non-Send types before await)
+    let clean_text = {
+        let document = scraper::Html::parse_document(&html);
+        let text_selector = scraper::Selector::parse("body").unwrap();
+        let body_text: String = document
+            .select(&text_selector)
+            .flat_map(|el| el.text())
+            .collect::<Vec<_>>()
+            .join(" ");
+
+        body_text.split_whitespace().collect::<Vec<_>>().join(" ")
+    };
+
+    if clean_text.len() < 100 {
+        return Err("Could not extract enough text from LinkedIn profile. The page may require login.".to_string());
+    }
+
+    let prompt = format!(
+        r#"Extract professional information from this LinkedIn profile page content. Return ONLY valid JSON.
+
+LINKEDIN PROFILE TEXT:
+{}
+
+The LinkedIn profile URL is: {}
+
+INSTRUCTIONS:
+- "title": Their headline/current position
+- "linkedin_url": Use the URL provided above
+- "key_skills": Extract ALL skills, technologies, tools mentioned
+- "years_experience": Calculate from work experience. Can be decimal (0.5 = 6 months)
+- "summary": Their About section or a summary based on their experience
+- "languages": Spoken languages listed
+- Use proper accents (á, é, í, ó, ú, ñ)
+
+Return this exact JSON:
+{{
+  "name": "",
+  "email": "",
+  "phone": "",
+  "linkedin_url": "{}",
+  "location": "",
+  "title": "",
+  "summary": "",
+  "key_skills": [],
+  "years_experience": 0,
+  "languages": []
+}}
+
+CRITICAL: Return ONLY the JSON. No explanation."#,
+        &clean_text[..clean_text.len().min(6000)],
+        url,
+        url
+    );
+
+    let messages = vec![
+        ChatMessage { role: "system".to_string(), content: "You parse LinkedIn profiles into structured data. Return ONLY valid JSON with proper Unicode.".to_string() },
+        ChatMessage { role: "user".to_string(), content: prompt },
+    ];
+
+    let response = chat_completion(&client, &ollama_url, &model, messages, 0.1).await?;
+
+    let clean = response.trim().trim_start_matches("```json").trim_start_matches("```").trim_end_matches("```").trim();
+    
+    let extracted: serde_json::Value = serde_json::from_str(clean)
+        .map_err(|e| format!("Failed to parse AI response: {e}\nRaw: {clean}"))?;
+
+    let current_profile = state.profile.read().await.clone();
+    
+    let profile = Profile {
+        name: extracted["name"].as_str().unwrap_or("").to_string(),
+        email: if extracted["email"].as_str().unwrap_or("").is_empty() { current_profile.email.clone() } else { extracted["email"].as_str().unwrap_or("").to_string() },
+        phone: if extracted["phone"].as_str().unwrap_or("").is_empty() { current_profile.phone.clone() } else { extracted["phone"].as_str().unwrap_or("").to_string() },
+        linkedin_url: extracted["linkedin_url"].as_str().unwrap_or("").to_string(),
+        location: extracted["location"].as_str().unwrap_or("").to_string(),
+        title: extracted["title"].as_str().unwrap_or("").to_string(),
+        summary: extracted["summary"].as_str().unwrap_or("").to_string(),
+        key_skills: {
+            let mut skills: Vec<String> = extracted["key_skills"].as_array()
+                .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                .unwrap_or_default();
+            // Merge with existing skills
+            for s in &current_profile.key_skills {
+                if !skills.contains(s) {
+                    skills.push(s.clone());
+                }
+            }
+            skills
+        },
+        years_experience: extracted["years_experience"].as_f64().unwrap_or(0.0) as f32,
+        languages: extracted["languages"].as_array()
+            .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+            .unwrap_or_default(),
+        preferred_language: if current_profile.preferred_language.is_empty() { "es".to_string() } else { current_profile.preferred_language },
+        tone: if current_profile.tone.is_empty() { "professional".to_string() } else { current_profile.tone },
+    };
+
+    // Auto-save
+    let data_dir = state.data_dir.read().await.clone();
+    let path = data_dir.join("profile.json");
+    let json = serde_json::to_string_pretty(&profile).map_err(|e| e.to_string())?;
+    fs::write(&path, &json).map_err(|e| format!("Failed to save profile: {e}"))?;
+
     *state.profile.write().await = profile.clone();
 
     Ok(profile)
@@ -378,7 +513,7 @@ pub async fn add_job(state: State<'_, AppState>, request: AddJobRequest) -> Resu
 
     // If URL provided but no description, scrape it
     if !url.is_empty() && raw_description.is_empty() {
-        let scraped = scraper::scrape_job_url(&url).await?;
+        let scraped = job_scraper::scrape_job_url(&url).await?;
         raw_description = scraped.raw_text;
         source = scraped.source;
         if company.is_empty() {
@@ -449,7 +584,7 @@ pub async fn delete_job(state: State<'_, AppState>, job_id: String) -> Result<()
 
 #[tauri::command]
 pub async fn scrape_job_url_cmd(request: ScrapeRequest) -> Result<ScrapeResult, String> {
-    let scraped = scraper::scrape_job_url(&request.url).await?;
+    let scraped = job_scraper::scrape_job_url(&request.url).await?;
     Ok(ScrapeResult {
         raw_text: scraped.raw_text,
         title: scraped.title,

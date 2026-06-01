@@ -2,10 +2,10 @@ import { useState, useEffect } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
 import {
   getProfile, saveProfile, resetProfile,
-  uploadCv, listCvs, deleteCv, extractProfileFromCv,
+  uploadCv, listCvs, deleteCv, extractProfileFromCv, extractProfileFromLinkedin,
   type Profile, type CvInfo
 } from '../services/api';
-import { Save, Loader2, Upload, Sparkles, User, Trash2, FileText, X, AlertTriangle } from 'lucide-react';
+import { Save, Loader2, Upload, Sparkles, User, Trash2, FileText, X, AlertTriangle, Linkedin } from 'lucide-react';
 
 export default function ProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -16,6 +16,8 @@ export default function ProfilePage() {
   const [skillInput, setSkillInput] = useState('');
   const [message, setMessage] = useState('');
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [linkedinUrl, setLinkedinUrl] = useState('');
+  const [linkedinLoading, setLinkedinLoading] = useState(false);
 
   useEffect(() => {
     getProfile().then(setProfile).catch(() => {});
@@ -92,6 +94,23 @@ export default function ProfilePage() {
       setMessage(`Extraction error: ${e}`);
     } finally {
       setExtracting(false);
+    }
+  }
+
+  async function handleLinkedinExtract() {
+    if (!linkedinUrl.trim()) return;
+    setLinkedinLoading(true);
+    setMessage('Scraping LinkedIn profile and extracting with AI...');
+    try {
+      const extracted = await extractProfileFromLinkedin(linkedinUrl.trim());
+      setProfile(extracted);
+      setMessage('Profile updated from LinkedIn!');
+      setLinkedinUrl('');
+      setTimeout(() => setMessage(''), 4000);
+    } catch (e) {
+      setMessage(`LinkedIn extraction error: ${e}`);
+    } finally {
+      setLinkedinLoading(false);
     }
   }
 
@@ -213,6 +232,34 @@ export default function ProfilePage() {
         )}
       </div>
 
+      {/* ─── LinkedIn Import ─── */}
+      <div className="bg-navy-800 rounded-xl border border-navy-700 p-5 mb-6">
+        <div className="flex items-center gap-2 mb-3">
+          <Linkedin size={16} className="text-blue-400" />
+          <h2 className="text-sm font-semibold text-white">Import from LinkedIn</h2>
+        </div>
+        <p className="text-xs text-gray-500 mb-3">
+          Paste your LinkedIn profile URL to extract skills, experience, and info automatically.
+        </p>
+        <div className="flex gap-2">
+          <input
+            type="url"
+            value={linkedinUrl}
+            onChange={e => setLinkedinUrl(e.target.value)}
+            placeholder="https://www.linkedin.com/in/your-profile"
+            className="flex-1 bg-navy-900 border border-navy-600 rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500"
+          />
+          <button
+            onClick={handleLinkedinExtract}
+            disabled={linkedinLoading || !linkedinUrl.trim()}
+            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 text-xs font-medium transition-colors shrink-0"
+          >
+            {linkedinLoading ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+            {linkedinLoading ? 'Extracting...' : 'Import'}
+          </button>
+        </div>
+      </div>
+
       {/* ─── Profile Form ─── */}
       <div className="bg-navy-800 rounded-xl border border-navy-700 p-6 space-y-5">
         <div className="flex items-center gap-2 mb-2">
@@ -233,8 +280,10 @@ export default function ProfilePage() {
           <label className="block text-sm font-medium text-gray-300 mb-1">Years of experience</label>
           <input
             type="number"
+            step="0.5"
+            min="0"
             value={profile.years_experience}
-            onChange={e => setProfile({ ...profile, years_experience: parseInt(e.target.value) || 0 })}
+            onChange={e => setProfile({ ...profile, years_experience: parseFloat(e.target.value) || 0 })}
             className="w-32 bg-navy-900 border border-navy-600 rounded-lg px-3 py-2.5 text-sm text-white"
           />
         </div>

@@ -17,6 +17,7 @@ pdf-extract = "0.8"
 docx-rs = "0.4"
 dirs = "6"
 scraper = "0.22"
+unicode-normalization = "0.1"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

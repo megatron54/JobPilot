@@ -1875,6 +1875,7 @@ dependencies = [
  "tauri-plugin-fs",
  "tauri-plugin-shell",
  "tokio",
+ "unicode-normalization",
 ]
 
 [[package]]
