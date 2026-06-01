@@ -10,6 +10,9 @@ venv/
 node_modules/
 frontend/dist/
 
+# Rust / Tauri
+src-tauri/target/
+
 # Environment
 .env
 .env.local

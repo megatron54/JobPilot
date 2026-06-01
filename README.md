@@ -1,43 +1,75 @@
 # JobPilot
 
-AI-powered job application assistant that uses local LLMs (via Ollama) to generate personalized cover letters, recruiter messages, and interview preparation content.
+Desktop AI-powered job application assistant that uses local LLMs (via Ollama) to generate personalized cover letters, recruiter messages, and interview preparation content. Built with Tauri (Rust) + React.
 
 ## Features
 
+- **Desktop App**: Native Windows executable with Tauri (Rust backend)
 - **Cover Letter Generation**: Personalized cover letters based on your CV and the specific job offer
 - **Recruiter Messages**: LinkedIn DMs and emails tailored for first contact, follow-ups, or networking
 - **Interview Q&A**: AI-generated answers to likely interview questions using the STAR method
-- **Job Analysis**: Automatic extraction of key information from job postings
+- **Job URL Scraping**: Paste a LinkedIn/InfoJobs/Indeed URL and automatically extract the job info
 - **Multi-language**: Generate content in any language (Spanish, English, etc.)
 - **100% Local**: All AI processing runs locally via Ollama - your data never leaves your machine
+- **Streaming**: See AI responses generated in real-time, token by token
 
 ## Architecture
 
 ```
 JobPilot/
-├── backend/          # Python FastAPI server
-│   └── app/
-│       ├── agents/   # AI generation agents (cover letter, messages, Q&A)
-│       ├── api/      # REST API routes
-│       ├── core/     # Config, LLM client
-│       └── services/ # CV parser, job manager, profile
-├── frontend/         # React + Vite + TailwindCSS
+├── src-tauri/        # Rust/Tauri desktop shell
 │   └── src/
+│       ├── main.rs       # App entry, command registration
+│       ├── commands.rs   # All Tauri commands (generate, jobs, cvs, profile)
+│       ├── ollama.rs     # Ollama lifecycle (auto-start, model pull)
+│       ├── llm.rs        # Streaming chat with Ollama API
+│       ├── scraper.rs    # Web scraper for job URLs
+│       ├── document.rs   # PDF/DOCX text extraction
+│       └── state.rs      # App state (profile, CVs, jobs)
+├── frontend/         # React + Vite + TailwindCSS (Tauri webview)
+│   └── src/
+│       ├── pages/        # Dashboard, Jobs, Generate, Profile
+│       └── services/     # Tauri invoke API layer
+├── backend/          # Python FastAPI server (alternative/Docker mode)
+│   └── app/
+│       ├── agents/       # AI generation agents
+│       ├── api/          # REST API routes
+│       ├── core/         # Config, LLM client
+│       └── services/     # CV parser, job manager, scraper, profile
 ├── data/
 │   ├── cvs/          # Your CV files (PDF, DOCX, etc.)
 │   ├── jobs/         # Saved job offers
 │   └── outputs/      # Generated content
-└── docker-compose.yml
+└── docker-compose.yml  # Alternative: run everything in Docker
 ```
 
 ## Quick Start
 
 ### Prerequisites
 
-- [Ollama](https://ollama.com) installed and running
-- Python 3.12+ (for local dev) or Docker
+- [Ollama](https://ollama.com) installed (the app auto-starts it)
+- [Rust](https://rustup.rs) + Node.js 20+ (for building)
 
-### Option 1: Docker (recommended)
+### Option 1: Desktop App (Tauri) - Recommended
+
+```bash
+# Install dependencies
+cd frontend
+npm install
+
+# Run in dev mode (hot reload)
+npm run tauri dev
+
+# Build the executable (.exe)
+npm run tauri build
+```
+
+The built `.exe` will be in `src-tauri/target/release/`. The app:
+1. Auto-starts Ollama if not running
+2. Auto-pulls `llama3.2` model if not present
+3. Provides a native desktop window
+
+### Option 2: Docker (server mode)
 
 ```bash
 docker compose up
@@ -45,10 +77,10 @@ docker compose up
 
 This will:
 1. Start Ollama and pull the `llama3.2` model
-2. Start the backend API on port 8000
+2. Start the Python backend API on port 8000
 3. Start the frontend on port 3000
 
-### Option 2: Local development
+### Option 3: Local development (Python backend)
 
 ```bash
 # Start Ollama
@@ -62,7 +94,7 @@ cd backend
 pip install -e .
 uvicorn app.main:app --reload
 
-# Frontend
+# Frontend (separate terminal)
 cd frontend
 npm install
 npm run dev

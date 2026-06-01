@@ -1,16 +1,16 @@
 import { useEffect, useState } from 'react';
-import { getHealth, listCvs, listJobs } from '../services/api';
+import { getHealth, listCvs, listJobs, type HealthResponse, type CvInfo, type JobOffer } from '../services/api';
 import { CheckCircle, XCircle, FileText, Briefcase } from 'lucide-react';
 
 export default function Dashboard() {
-  const [health, setHealth] = useState<{ ollama_status: string; llm_model: string } | null>(null);
-  const [cvCount, setCvCount] = useState(0);
-  const [jobCount, setJobCount] = useState(0);
+  const [health, setHealth] = useState<HealthResponse | null>(null);
+  const [cvs, setCvs] = useState<CvInfo[]>([]);
+  const [jobs, setJobs] = useState<JobOffer[]>([]);
 
   useEffect(() => {
     getHealth().then(setHealth).catch(() => {});
-    listCvs().then(d => setCvCount(d.cvs.length)).catch(() => {});
-    listJobs().then(d => setJobCount(d.jobs.length)).catch(() => {});
+    listCvs().then(setCvs).catch(() => {});
+    listJobs().then(setJobs).catch(() => {});
   }, []);
 
   const ollamaConnected = health?.ollama_status === 'connected';
@@ -26,21 +26,18 @@ export default function Dashboard() {
           title="Ollama"
           value={ollamaConnected ? `Connected (${health?.llm_model})` : 'Disconnected'}
           subtitle={ollamaConnected ? 'Ready to generate' : 'Start Ollama to begin'}
-          color={ollamaConnected ? 'green' : 'red'}
         />
         <StatusCard
           icon={<FileText className="text-blue-500" />}
           title="CVs"
-          value={`${cvCount} uploaded`}
+          value={`${cvs.length} uploaded`}
           subtitle="PDF, DOCX, TXT supported"
-          color="blue"
         />
         <StatusCard
           icon={<Briefcase className="text-purple-500" />}
           title="Job Offers"
-          value={`${jobCount} saved`}
+          value={`${jobs.length} saved`}
           subtitle="Paste URL or text to add"
-          color="purple"
         />
       </div>
 
@@ -54,11 +51,11 @@ export default function Dashboard() {
           </li>
           <li className="flex items-start gap-3">
             <span className="bg-blue-100 text-blue-700 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shrink-0">2</span>
-            <span>Upload your <strong>CV</strong> (PDF or DOCX)</span>
+            <span>Upload your <strong>CV</strong> (drag & drop or file picker - PDF, DOCX, TXT)</span>
           </li>
           <li className="flex items-start gap-3">
             <span className="bg-blue-100 text-blue-700 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shrink-0">3</span>
-            <span>Add <strong>Job Offers</strong> - paste a LinkedIn URL or the job description text</span>
+            <span>Add <strong>Job Offers</strong> - paste a LinkedIn/InfoJobs URL or the description text</span>
           </li>
           <li className="flex items-start gap-3">
             <span className="bg-blue-100 text-blue-700 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shrink-0">4</span>
@@ -70,12 +67,11 @@ export default function Dashboard() {
   );
 }
 
-function StatusCard({ icon, title, value, subtitle, color }: {
+function StatusCard({ icon, title, value, subtitle }: {
   icon: React.ReactNode;
   title: string;
   value: string;
   subtitle: string;
-  color: string;
 }) {
   return (
     <div className="bg-white rounded-xl shadow-sm border p-5">

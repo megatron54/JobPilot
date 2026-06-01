@@ -1,16 +1,17 @@
 import { useState, useEffect } from 'react';
+import { listen } from '@tauri-apps/api/event';
 import { 
   listCvs, listJobs, 
   generateCoverLetter, generateRecruiterMessage, 
   generateInterviewAnswer, generateInterviewQuestions,
-  type CvFile, type JobOffer 
+  type CvInfo, type JobOffer 
 } from '../services/api';
 import { FileText, MessageSquare, HelpCircle, Loader2, Copy, Check } from 'lucide-react';
 
 type GenerationType = 'cover_letter' | 'recruiter_message' | 'interview_answer' | 'interview_questions';
 
 export default function GeneratePage() {
-  const [cvs, setCvs] = useState<CvFile[]>([]);
+  const [cvs, setCvs] = useState<CvInfo[]>([]);
   const [jobs, setJobs] = useState<JobOffer[]>([]);
   const [selectedCv, setSelectedCv] = useState('');
   const [selectedJob, setSelectedJob] = useState('');
@@ -24,36 +25,49 @@ export default function GeneratePage() {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    listCvs().then(d => setCvs(d.cvs)).catch(() => {});
-    listJobs().then(d => setJobs(d.jobs)).catch(() => {});
+    listCvs().then(setCvs).catch(() => {});
+    listJobs().then(setJobs).catch(() => {});
   }, []);
 
   async function handleGenerate() {
     if (!selectedCv || !selectedJob) return;
     setLoading(true);
     setResult('');
+
+    // Listen for streaming tokens
+    let accumulated = '';
+    const unlisten = await listen<string>('generate-token', (event) => {
+      accumulated += event.payload;
+      setResult(accumulated);
+    });
+
+    const unlistenDone = await listen('generate-token-done', () => {
+      setLoading(false);
+      unlisten();
+      unlistenDone();
+    });
+
     try {
-      let response;
       switch (genType) {
         case 'cover_letter':
-          response = await generateCoverLetter({
+          await generateCoverLetter({
             cv_filename: selectedCv,
             job_id: selectedJob,
             language,
-            recruiter_name: recruiterName,
+            recruiter_name: recruiterName || undefined,
           });
           break;
         case 'recruiter_message':
-          response = await generateRecruiterMessage({
+          await generateRecruiterMessage({
             cv_filename: selectedCv,
             job_id: selectedJob,
             message_type: messageType,
             language,
-            recruiter_name: recruiterName,
+            recruiter_name: recruiterName || undefined,
           });
           break;
         case 'interview_answer':
-          response = await generateInterviewAnswer({
+          await generateInterviewAnswer({
             question,
             cv_filename: selectedCv,
             job_id: selectedJob,
@@ -61,18 +75,18 @@ export default function GeneratePage() {
           });
           break;
         case 'interview_questions':
-          response = await generateInterviewQuestions({
-            cv_filename: selectedCv,
-            job_id: selectedJob,
-            language,
-          });
+          const questionsResult = await generateInterviewQuestions();
+          setResult(questionsResult.content);
+          setLoading(false);
+          unlisten();
+          unlistenDone();
           break;
       }
-      setResult(response.content);
     } catch (e: any) {
-      setResult(`Error: ${e.message}`);
-    } finally {
+      setResult(`Error: ${String(e)}`);
       setLoading(false);
+      unlisten();
+      unlistenDone();
     }
   }
 
@@ -130,7 +144,7 @@ export default function GeneratePage() {
             </select>
           </div>
 
-          {/* Recruiter name (for cover letter and messages) */}
+          {/* Recruiter name */}
           {(genType === 'cover_letter' || genType === 'recruiter_message') && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Recruiter name (optional)</label>
@@ -144,7 +158,7 @@ export default function GeneratePage() {
             </div>
           )}
 
-          {/* Message type (for recruiter messages) */}
+          {/* Message type */}
           {genType === 'recruiter_message' && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Message type</label>
@@ -156,7 +170,7 @@ export default function GeneratePage() {
             </div>
           )}
 
-          {/* Question (for interview answers) */}
+          {/* Question */}
           {genType === 'interview_answer' && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Interview question</label>
@@ -176,7 +190,7 @@ export default function GeneratePage() {
             className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
           >
             {loading ? <Loader2 size={18} className="animate-spin" /> : <FileText size={18} />}
-            {loading ? 'Generating...' : 'Generate'}
+            {loading ? 'Generating with AI...' : 'Generate'}
           </button>
         </div>
 
@@ -193,8 +207,9 @@ export default function GeneratePage() {
           </div>
           
           {result ? (
-            <div className="prose prose-sm max-w-none whitespace-pre-wrap text-gray-700 bg-gray-50 rounded-lg p-4 min-h-[300px]">
+            <div className="prose prose-sm max-w-none whitespace-pre-wrap text-gray-700 bg-gray-50 rounded-lg p-4 min-h-[400px] max-h-[600px] overflow-y-auto">
               {result}
+              {loading && <span className="inline-block w-2 h-4 bg-blue-500 animate-pulse ml-0.5" />}
             </div>
           ) : (
             <div className="flex items-center justify-center h-64 text-gray-400 text-sm">

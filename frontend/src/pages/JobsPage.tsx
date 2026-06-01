@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
-import { listJobs, createJob, scrapeJob, deleteJob, type JobOffer } from '../services/api';
-import { Plus, Trash2, Globe, FileText, Loader2 } from 'lucide-react';
+import { open } from '@tauri-apps/plugin-dialog';
+import { listJobs, addJob, deleteJob, uploadCv, listCvs, scrapeJobUrl, type JobOffer, type CvInfo } from '../services/api';
+import { Plus, Trash2, Globe, FileText, Loader2, Upload, Briefcase } from 'lucide-react';
 
 export default function JobsPage() {
   const [jobs, setJobs] = useState<JobOffer[]>([]);
+  const [cvs, setCvs] = useState<CvInfo[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [inputMode, setInputMode] = useState<'url' | 'manual'>('url');
   const [url, setUrl] = useState('');
@@ -15,12 +17,13 @@ export default function JobsPage() {
 
   useEffect(() => {
     loadJobs();
+    listCvs().then(setCvs).catch(() => {});
   }, []);
 
   async function loadJobs() {
     try {
       const data = await listJobs();
-      setJobs(data.jobs);
+      setJobs(data);
     } catch {
       // ignore
     }
@@ -31,9 +34,9 @@ export default function JobsPage() {
     setError('');
     try {
       if (inputMode === 'url') {
-        await createJob({ url });
+        await addJob({ url });
       } else {
-        await createJob({ raw_description: rawDescription, company, position });
+        await addJob({ raw_description: rawDescription, company, position });
       }
       setShowAdd(false);
       setUrl('');
@@ -42,7 +45,7 @@ export default function JobsPage() {
       setPosition('');
       await loadJobs();
     } catch (e: any) {
-      setError(e.message || 'Error adding job');
+      setError(String(e));
     } finally {
       setLoading(false);
     }
@@ -53,8 +56,52 @@ export default function JobsPage() {
     await loadJobs();
   }
 
+  async function handleUploadCv() {
+    const selected = await open({
+      multiple: false,
+      filters: [{ name: 'CV Files', extensions: ['pdf', 'docx', 'doc', 'txt', 'md'] }],
+    });
+    if (selected) {
+      try {
+        await uploadCv(selected as string);
+        const updated = await listCvs();
+        setCvs(updated);
+      } catch (e) {
+        setError(String(e));
+      }
+    }
+  }
+
   return (
     <div className="p-8">
+      {/* CVs section */}
+      <div className="mb-8">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-800">Your CVs</h2>
+          <button
+            onClick={handleUploadCv}
+            className="flex items-center gap-2 bg-gray-100 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-200 text-sm"
+          >
+            <Upload size={16} />
+            Upload CV
+          </button>
+        </div>
+        {cvs.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {cvs.map(cv => (
+              <div key={cv.filename} className="bg-white border rounded-lg px-3 py-2 text-sm flex items-center gap-2">
+                <FileText size={14} className="text-blue-500" />
+                {cv.filename}
+                <span className="text-xs text-gray-400">({Math.round(cv.char_count / 1000)}k chars)</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-gray-400">No CVs uploaded yet. Upload a PDF or DOCX.</p>
+        )}
+      </div>
+
+      {/* Jobs section */}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-800">Job Offers</h1>
         <button
@@ -77,7 +124,7 @@ export default function JobsPage() {
               }`}
             >
               <Globe size={16} />
-              From URL
+              From URL (LinkedIn, InfoJobs, Indeed...)
             </button>
             <button
               onClick={() => setInputMode('manual')}
@@ -101,7 +148,7 @@ export default function JobsPage() {
                 className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
               <p className="text-xs text-gray-400 mt-1">
-                Supports LinkedIn, InfoJobs, Indeed, and any job posting page
+                Supports LinkedIn, InfoJobs, Indeed, and any job posting page. Content will be scraped automatically.
               </p>
             </div>
           ) : (
@@ -149,7 +196,7 @@ export default function JobsPage() {
             className="mt-4 flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50"
           >
             {loading ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
-            {loading ? 'Processing...' : 'Save Job Offer'}
+            {loading ? 'Processing (scraping + AI analysis)...' : 'Save Job Offer'}
           </button>
         </div>
       )}
@@ -170,7 +217,9 @@ export default function JobsPage() {
                 <div className="flex gap-3 mt-2 text-xs text-gray-400">
                   {job.location && <span>{job.location}</span>}
                   {job.source && <span className="bg-gray-100 px-2 py-0.5 rounded">{job.source}</span>}
-                  <span>{new Date(job.created_at).toLocaleDateString()}</span>
+                  {job.url && (
+                    <a href={job.url} target="_blank" className="text-blue-400 hover:underline">link</a>
+                  )}
                 </div>
               </div>
               <button
@@ -184,14 +233,5 @@ export default function JobsPage() {
         )}
       </div>
     </div>
-  );
-}
-
-function Briefcase({ size, className }: { size: number; className?: string }) {
-  return (
-    <svg width={size} height={size} className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <rect x="2" y="7" width="20" height="14" rx="2" ry="2" strokeWidth="2"/>
-      <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" strokeWidth="2"/>
-    </svg>
   );
 }

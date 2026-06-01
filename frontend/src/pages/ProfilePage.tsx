@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getProfile, updateProfile, type Profile } from '../services/api';
+import { getProfile, saveProfile, type Profile } from '../services/api';
 import { Save, Loader2 } from 'lucide-react';
 
 export default function ProfilePage() {
@@ -16,7 +16,7 @@ export default function ProfilePage() {
     if (!profile) return;
     setSaving(true);
     try {
-      const updated = await updateProfile(profile);
+      const updated = await saveProfile(profile);
       setProfile(updated);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
