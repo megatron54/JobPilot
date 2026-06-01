@@ -433,7 +433,13 @@ pub async fn generate_cover_letter(
     let job = get_job_data(&state, &request.job_id).await?;
     let profile = state.profile.read().await.clone();
 
-    let lang = if request.language.starts_with("es") { "Spanish" } else { "English" };
+    let lang = match request.language.as_str() {
+        "es" => "Spanish (use proper accents: á, é, í, ó, ú, ñ, ü)",
+        "fr" => "French (use proper accents: é, è, ê, ë, à, ç, ô, î, ù)",
+        "de" => "German (use proper umlauts: ä, ö, ü, ß)",
+        "pt" => "Portuguese (use proper accents: ã, õ, á, é, ç, â, ê)",
+        _ => "English",
+    };
     let recruiter = request.recruiter_name.unwrap_or_default();
 
     let system = format!(
@@ -449,7 +455,8 @@ pub async fn generate_cover_letter(
          - Highlight CV skills matching requirements\n\
          - Be concise (max 4 paragraphs)\n\
          - DO NOT invent experience not in the CV\n\
-         - Write in {lang}"
+         - Write ENTIRELY in {lang}\n\
+         - Use correct diacritics and special characters for the language"
     );
 
     let user_prompt = format!(
@@ -493,7 +500,13 @@ pub async fn generate_recruiter_message(
     let job = get_job_data(&state, &request.job_id).await?;
     let profile = state.profile.read().await.clone();
 
-    let lang = if request.language.starts_with("es") { "Spanish" } else { "English" };
+    let lang = match request.language.as_str() {
+        "es" => "Spanish (use proper accents: á, é, í, ó, ú, ñ, ü)",
+        "fr" => "French (use proper accents: é, è, ê, ë, à, ç, ô, î, ù)",
+        "de" => "German (use proper umlauts: ä, ö, ü, ß)",
+        "pt" => "Portuguese (use proper accents: ã, õ, á, é, ç, â, ê)",
+        _ => "English",
+    };
     let recruiter = request.recruiter_name.unwrap_or_default();
 
     let system = format!(
@@ -504,7 +517,8 @@ pub async fn generate_recruiter_message(
          - Be direct but respectful\n\
          - Show you researched the company\n\
          - End with a question or clear CTA\n\
-         - Write in {lang}"
+         - Write ENTIRELY in {lang}\n\
+         - Use correct diacritics and special characters for the language"
     );
 
     let user_prompt = format!(
@@ -548,7 +562,13 @@ pub async fn generate_interview_answer(
     let job = get_job_data(&state, &request.job_id).await?;
     let profile = state.profile.read().await.clone();
 
-    let lang = if request.language.starts_with("es") { "Spanish" } else { "English" };
+    let lang = match request.language.as_str() {
+        "es" => "Spanish (use proper accents: á, é, í, ó, ú, ñ, ü)",
+        "fr" => "French (use proper accents: é, è, ê, ë, à, ç, ô, î, ù)",
+        "de" => "German (use proper umlauts: ä, ö, ü, ß)",
+        "pt" => "Portuguese (use proper accents: ã, õ, á, é, ç, â, ê)",
+        _ => "English",
+    };
 
     let system = format!(
         "You are an expert interview coach.\n\
@@ -556,7 +576,8 @@ pub async fn generate_interview_answer(
          Base answers on REAL experience from the CV.\n\
          DO NOT invent experiences.\n\
          Include delivery tips after the answer.\n\
-         Write in {lang}"
+         Write ENTIRELY in {lang}\n\
+         Use correct diacritics and special characters for the language"
     );
 
     let user_prompt = format!(

@@ -65,12 +65,30 @@ pub async fn stream_chat(
     }
 
     let mut stream = resp.bytes_stream();
+    let mut raw_buffer: Vec<u8> = Vec::new();
     let mut buffer = String::new();
     let mut full_response = String::new();
 
     while let Some(chunk) = stream.next().await {
         let bytes = chunk.map_err(|e| format!("Stream error: {e}"))?;
-        buffer.push_str(&String::from_utf8_lossy(&bytes));
+        raw_buffer.extend_from_slice(&bytes);
+
+        // Only convert to string the portion that is valid UTF-8
+        // Keep incomplete multi-byte sequences in raw_buffer for next iteration
+        match std::str::from_utf8(&raw_buffer) {
+            Ok(valid) => {
+                buffer.push_str(valid);
+                raw_buffer.clear();
+            }
+            Err(e) => {
+                let valid_up_to = e.valid_up_to();
+                if valid_up_to > 0 {
+                    let valid = std::str::from_utf8(&raw_buffer[..valid_up_to]).unwrap();
+                    buffer.push_str(valid);
+                }
+                raw_buffer = raw_buffer[valid_up_to..].to_vec();
+            }
+        }
 
         // Process complete JSON lines
         while let Some(newline_pos) = buffer.find('\n') {
