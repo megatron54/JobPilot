@@ -95,6 +95,10 @@ export async function getCvContent(filename: string): Promise<string> {
   return invoke('get_cv_content', { filename });
 }
 
+export async function extractProfileFromCv(filename: string): Promise<Profile> {
+  return invoke('extract_profile_from_cv', { filename });
+}
+
 // ─── Jobs ──────────────────────────────────────────────────────────
 
 export async function listJobs(): Promise<JobOffer[]> {

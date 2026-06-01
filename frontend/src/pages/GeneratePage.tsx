@@ -6,7 +6,7 @@ import {
   generateInterviewAnswer, generateInterviewQuestions,
   type CvInfo, type JobOffer 
 } from '../services/api';
-import { FileText, MessageSquare, HelpCircle, Loader2, Copy, Check } from 'lucide-react';
+import { FileText, MessageSquare, HelpCircle, Loader2, Copy, Check, Sparkles } from 'lucide-react';
 
 type GenerationType = 'cover_letter' | 'recruiter_message' | 'interview_answer' | 'interview_questions';
 
@@ -98,26 +98,29 @@ export default function GeneratePage() {
 
   return (
     <div className="p-8">
-      <h1 className="text-2xl font-bold text-gray-800 mb-6">Generate Content</h1>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-white mb-1">Generate Content</h1>
+        <p className="text-sm text-gray-400">Create personalized application materials powered by AI</p>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Config panel */}
-        <div className="bg-white rounded-xl shadow-sm border p-6 space-y-4">
+        <div className="bg-navy-800 rounded-xl border border-navy-700 p-6 space-y-5">
           {/* Generation type */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">What to generate</label>
+            <label className="block text-sm font-medium text-gray-300 mb-2">What to generate</label>
             <div className="grid grid-cols-2 gap-2">
               <TypeButton active={genType === 'cover_letter'} onClick={() => setGenType('cover_letter')} icon={<FileText size={16} />} label="Cover Letter" />
               <TypeButton active={genType === 'recruiter_message'} onClick={() => setGenType('recruiter_message')} icon={<MessageSquare size={16} />} label="Recruiter DM" />
               <TypeButton active={genType === 'interview_answer'} onClick={() => setGenType('interview_answer')} icon={<HelpCircle size={16} />} label="Interview Answer" />
-              <TypeButton active={genType === 'interview_questions'} onClick={() => setGenType('interview_questions')} icon={<HelpCircle size={16} />} label="Likely Questions" />
+              <TypeButton active={genType === 'interview_questions'} onClick={() => setGenType('interview_questions')} icon={<Sparkles size={16} />} label="Likely Questions" />
             </div>
           </div>
 
           {/* CV selector */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">CV</label>
-            <select value={selectedCv} onChange={e => setSelectedCv(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm">
+            <label className="block text-sm font-medium text-gray-300 mb-1">CV</label>
+            <select value={selectedCv} onChange={e => setSelectedCv(e.target.value)} className="w-full bg-navy-900 border border-navy-600 rounded-lg px-3 py-2.5 text-sm text-white">
               <option value="">Select a CV...</option>
               {cvs.map(cv => <option key={cv.filename} value={cv.filename}>{cv.filename}</option>)}
             </select>
@@ -125,8 +128,8 @@ export default function GeneratePage() {
 
           {/* Job selector */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Job Offer</label>
-            <select value={selectedJob} onChange={e => setSelectedJob(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm">
+            <label className="block text-sm font-medium text-gray-300 mb-1">Job Offer</label>
+            <select value={selectedJob} onChange={e => setSelectedJob(e.target.value)} className="w-full bg-navy-900 border border-navy-600 rounded-lg px-3 py-2.5 text-sm text-white">
               <option value="">Select a job offer...</option>
               {jobs.map(job => <option key={job.id} value={job.id}>{job.position} - {job.company}</option>)}
             </select>
@@ -134,8 +137,8 @@ export default function GeneratePage() {
 
           {/* Language */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Language</label>
-            <select value={language} onChange={e => setLanguage(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm">
+            <label className="block text-sm font-medium text-gray-300 mb-1">Language</label>
+            <select value={language} onChange={e => setLanguage(e.target.value)} className="w-full bg-navy-900 border border-navy-600 rounded-lg px-3 py-2.5 text-sm text-white">
               <option value="es">Spanish</option>
               <option value="en">English</option>
               <option value="fr">French</option>
@@ -147,13 +150,13 @@ export default function GeneratePage() {
           {/* Recruiter name */}
           {(genType === 'cover_letter' || genType === 'recruiter_message') && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Recruiter name (optional)</label>
+              <label className="block text-sm font-medium text-gray-300 mb-1">Recruiter name (optional)</label>
               <input
                 type="text"
                 value={recruiterName}
                 onChange={e => setRecruiterName(e.target.value)}
                 placeholder="e.g. Rafael Fuentes"
-                className="w-full border rounded-lg px-3 py-2 text-sm"
+                className="w-full bg-navy-900 border border-navy-600 rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500"
               />
             </div>
           )}
@@ -161,8 +164,8 @@ export default function GeneratePage() {
           {/* Message type */}
           {genType === 'recruiter_message' && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Message type</label>
-              <select value={messageType} onChange={e => setMessageType(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm">
+              <label className="block text-sm font-medium text-gray-300 mb-1">Message type</label>
+              <select value={messageType} onChange={e => setMessageType(e.target.value)} className="w-full bg-navy-900 border border-navy-600 rounded-lg px-3 py-2.5 text-sm text-white">
                 <option value="first_contact">First contact</option>
                 <option value="follow_up">Follow-up</option>
                 <option value="networking">Networking</option>
@@ -173,13 +176,13 @@ export default function GeneratePage() {
           {/* Question */}
           {genType === 'interview_answer' && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Interview question</label>
+              <label className="block text-sm font-medium text-gray-300 mb-1">Interview question</label>
               <textarea
                 value={question}
                 onChange={e => setQuestion(e.target.value)}
                 placeholder="e.g. Tell me about a time you led a difficult project..."
                 rows={3}
-                className="w-full border rounded-lg px-3 py-2 text-sm"
+                className="w-full bg-navy-900 border border-navy-600 rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500"
               />
             </div>
           )}
@@ -187,33 +190,34 @@ export default function GeneratePage() {
           <button
             onClick={handleGenerate}
             disabled={loading || !selectedCv || !selectedJob}
-            className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+            className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 disabled:opacity-40 transition-colors font-medium"
           >
-            {loading ? <Loader2 size={18} className="animate-spin" /> : <FileText size={18} />}
+            {loading ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
             {loading ? 'Generating with AI...' : 'Generate'}
           </button>
         </div>
 
         {/* Result panel */}
-        <div className="bg-white rounded-xl shadow-sm border p-6">
+        <div className="bg-navy-800 rounded-xl border border-navy-700 p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-medium text-gray-700">Generated Content</h2>
+            <h2 className="text-sm font-medium text-gray-300">Generated Content</h2>
             {result && (
-              <button onClick={handleCopy} className="flex items-center gap-1 text-sm text-gray-500 hover:text-blue-600">
-                {copied ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
+              <button onClick={handleCopy} className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-blue-400 transition-colors">
+                {copied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
                 {copied ? 'Copied!' : 'Copy'}
               </button>
             )}
           </div>
           
           {result ? (
-            <div className="prose prose-sm max-w-none whitespace-pre-wrap text-gray-700 bg-gray-50 rounded-lg p-4 min-h-[400px] max-h-[600px] overflow-y-auto">
+            <div className="whitespace-pre-wrap text-sm text-gray-200 bg-navy-900 rounded-lg p-4 min-h-[400px] max-h-[600px] overflow-y-auto border border-navy-700 leading-relaxed">
               {result}
-              {loading && <span className="inline-block w-2 h-4 bg-blue-500 animate-pulse ml-0.5" />}
+              {loading && <span className="inline-block w-1.5 h-4 bg-blue-500 animate-pulse ml-0.5 rounded-sm" />}
             </div>
           ) : (
-            <div className="flex items-center justify-center h-64 text-gray-400 text-sm">
-              {loading ? 'Generating with AI...' : 'Select options and click Generate'}
+            <div className="flex flex-col items-center justify-center h-64 text-gray-500">
+              <FileText size={32} className="mb-2 opacity-50" />
+              <p className="text-sm">{loading ? 'Generating with AI...' : 'Select options and click Generate'}</p>
             </div>
           )}
         </div>
@@ -226,8 +230,10 @@ function TypeButton({ active, onClick, icon, label }: { active: boolean; onClick
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
-        active ? 'bg-blue-100 text-blue-700 border border-blue-200' : 'text-gray-500 border border-gray-200 hover:bg-gray-50'
+      className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm transition-colors ${
+        active 
+          ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' 
+          : 'text-gray-400 border border-navy-600 hover:bg-navy-700 hover:text-gray-300'
       }`}
     >
       {icon}

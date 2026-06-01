@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { getHealth, listCvs, listJobs, type HealthResponse, type CvInfo, type JobOffer } from '../services/api';
-import { CheckCircle, XCircle, FileText, Briefcase } from 'lucide-react';
+import { CheckCircle, XCircle, FileText, Briefcase, Zap, ArrowRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 export default function Dashboard() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [cvs, setCvs] = useState<CvInfo[]>([]);
   const [jobs, setJobs] = useState<JobOffer[]>([]);
+  const navigate = useNavigate();
 
   useEffect(() => {
     getHealth().then(setHealth).catch(() => {});
@@ -17,70 +19,85 @@ export default function Dashboard() {
 
   return (
     <div className="p-8">
-      <h1 className="text-2xl font-bold text-gray-800 mb-6">Dashboard</h1>
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold text-white mb-1">Dashboard</h1>
+        <p className="text-sm text-gray-400">Overview of your job application toolkit</p>
+      </div>
 
       {/* Status cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
         <StatusCard
-          icon={ollamaConnected ? <CheckCircle className="text-green-500" /> : <XCircle className="text-red-500" />}
+          icon={ollamaConnected ? <CheckCircle size={20} className="text-green-400" /> : <XCircle size={20} className="text-red-400" />}
           title="Ollama"
-          value={ollamaConnected ? `Connected (${health?.llm_model})` : 'Disconnected'}
-          subtitle={ollamaConnected ? 'Ready to generate' : 'Start Ollama to begin'}
+          value={ollamaConnected ? `Connected` : 'Disconnected'}
+          subtitle={ollamaConnected ? `Model: ${health?.llm_model}` : 'Start Ollama to begin'}
+          accent={ollamaConnected ? 'green' : 'red'}
         />
         <StatusCard
-          icon={<FileText className="text-blue-500" />}
-          title="CVs"
-          value={`${cvs.length} uploaded`}
+          icon={<FileText size={20} className="text-blue-400" />}
+          title="CVs Uploaded"
+          value={`${cvs.length}`}
           subtitle="PDF, DOCX, TXT supported"
+          accent="blue"
         />
         <StatusCard
-          icon={<Briefcase className="text-purple-500" />}
+          icon={<Briefcase size={20} className="text-purple-400" />}
           title="Job Offers"
-          value={`${jobs.length} saved`}
+          value={`${jobs.length}`}
           subtitle="Paste URL or text to add"
+          accent="purple"
         />
       </div>
 
       {/* Quick start */}
-      <div className="bg-white rounded-xl shadow-sm border p-6">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">Quick Start</h2>
-        <ol className="space-y-3 text-sm text-gray-600">
-          <li className="flex items-start gap-3">
-            <span className="bg-blue-100 text-blue-700 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shrink-0">1</span>
-            <span>Configure your <strong>Profile</strong> with your personal info, skills, and preferred tone</span>
-          </li>
-          <li className="flex items-start gap-3">
-            <span className="bg-blue-100 text-blue-700 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shrink-0">2</span>
-            <span>Upload your <strong>CV</strong> (drag & drop or file picker - PDF, DOCX, TXT)</span>
-          </li>
-          <li className="flex items-start gap-3">
-            <span className="bg-blue-100 text-blue-700 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shrink-0">3</span>
-            <span>Add <strong>Job Offers</strong> - paste a LinkedIn/InfoJobs URL or the description text</span>
-          </li>
-          <li className="flex items-start gap-3">
-            <span className="bg-blue-100 text-blue-700 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shrink-0">4</span>
-            <span>Go to <strong>Generate</strong> and create cover letters, recruiter messages, or interview prep</span>
-          </li>
-        </ol>
+      <div className="bg-navy-800 rounded-xl border border-navy-700 p-6">
+        <div className="flex items-center gap-2 mb-5">
+          <Zap size={18} className="text-blue-400" />
+          <h2 className="text-lg font-semibold text-white">Quick Start</h2>
+        </div>
+        <div className="space-y-4">
+          <Step num={1} text="Upload your CV and let AI auto-fill your profile" action="Go to Profile" onClick={() => navigate('/profile')} />
+          <Step num={2} text="Add job offers by pasting a URL or the description text" action="Add Jobs" onClick={() => navigate('/jobs')} />
+          <Step num={3} text="Generate cover letters, recruiter DMs, or interview prep" action="Generate" onClick={() => navigate('/generate')} />
+        </div>
       </div>
     </div>
   );
 }
 
-function StatusCard({ icon, title, value, subtitle }: {
+function StatusCard({ icon, title, value, subtitle, accent }: {
   icon: React.ReactNode;
   title: string;
   value: string;
   subtitle: string;
+  accent: string;
 }) {
+  const borderColor = accent === 'green' ? 'border-green-500/30' : accent === 'blue' ? 'border-blue-500/30' : accent === 'purple' ? 'border-purple-500/30' : 'border-red-500/30';
   return (
-    <div className="bg-white rounded-xl shadow-sm border p-5">
-      <div className="flex items-center gap-3 mb-2">
+    <div className={`bg-navy-800 rounded-xl border border-navy-700 p-5 hover:${borderColor} transition-colors`}>
+      <div className="flex items-center gap-3 mb-3">
         {icon}
-        <span className="text-sm font-medium text-gray-500">{title}</span>
+        <span className="text-sm font-medium text-gray-400">{title}</span>
       </div>
-      <p className="text-lg font-semibold text-gray-800">{value}</p>
-      <p className="text-xs text-gray-400 mt-1">{subtitle}</p>
+      <p className="text-2xl font-bold text-white">{value}</p>
+      <p className="text-xs text-gray-500 mt-1">{subtitle}</p>
+    </div>
+  );
+}
+
+function Step({ num, text, action, onClick }: { num: number; text: string; action: string; onClick: () => void }) {
+  return (
+    <div className="flex items-center gap-4 group">
+      <span className="bg-blue-600/20 text-blue-400 border border-blue-500/30 rounded-full w-8 h-8 flex items-center justify-center text-sm font-bold shrink-0">
+        {num}
+      </span>
+      <span className="text-sm text-gray-300 flex-1">{text}</span>
+      <button
+        onClick={onClick}
+        className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 opacity-0 group-hover:opacity-100 transition-opacity"
+      >
+        {action} <ArrowRight size={12} />
+      </button>
     </div>
   );
 }

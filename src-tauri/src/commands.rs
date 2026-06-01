@@ -232,6 +232,90 @@ pub async fn get_cv_content(state: State<'_, AppState>, filename: String) -> Res
         .ok_or_else(|| format!("CV not found: {filename}"))
 }
 
+/// Extract profile information from a CV using AI
+#[tauri::command]
+pub async fn extract_profile_from_cv(state: State<'_, AppState>, filename: String) -> Result<Profile, String> {
+    let ollama_url = state.ollama_url.read().await.clone();
+    let model = state.llm_model.read().await.clone();
+    let client = Client::new();
+
+    let cvs = state.cvs.read().await;
+    let cv_text = cvs.get(&filename)
+        .cloned()
+        .ok_or_else(|| format!("CV not found: {filename}"))?;
+    drop(cvs);
+
+    let prompt = format!(
+        r#"Extract personal and professional information from this CV and return ONLY valid JSON (no other text):
+
+{}
+
+Return this exact JSON structure (fill in what you find, leave empty string "" if not found):
+{{
+  "name": "",
+  "email": "",
+  "phone": "",
+  "linkedin_url": "",
+  "location": "",
+  "title": "",
+  "summary": "",
+  "key_skills": [],
+  "years_experience": 0,
+  "languages": []
+}}
+
+IMPORTANT: Return ONLY the JSON, nothing else."#,
+        &cv_text[..cv_text.len().min(4000)]
+    );
+
+    let messages = vec![
+        ChatMessage { role: "system".to_string(), content: "You extract structured data from CVs. Return ONLY valid JSON.".to_string() },
+        ChatMessage { role: "user".to_string(), content: prompt },
+    ];
+
+    let response = chat_completion(&client, &ollama_url, &model, messages, 0.1).await?;
+
+    // Parse JSON from response
+    let clean = response.trim().trim_start_matches("```json").trim_start_matches("```").trim_end_matches("```").trim();
+    
+    let extracted: serde_json::Value = serde_json::from_str(clean)
+        .map_err(|e| format!("Failed to parse AI response as JSON: {e}\nRaw: {clean}"))?;
+
+    // Build profile from extracted data, preserving existing tone/language preferences
+    let current_profile = state.profile.read().await.clone();
+    
+    let profile = Profile {
+        name: extracted["name"].as_str().unwrap_or("").to_string(),
+        email: extracted["email"].as_str().unwrap_or("").to_string(),
+        phone: extracted["phone"].as_str().unwrap_or("").to_string(),
+        linkedin_url: extracted["linkedin_url"].as_str().unwrap_or("").to_string(),
+        location: extracted["location"].as_str().unwrap_or("").to_string(),
+        title: extracted["title"].as_str().unwrap_or("").to_string(),
+        summary: extracted["summary"].as_str().unwrap_or("").to_string(),
+        key_skills: extracted["key_skills"].as_array()
+            .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+            .unwrap_or_default(),
+        years_experience: extracted["years_experience"].as_u64().unwrap_or(0) as u32,
+        languages: extracted["languages"].as_array()
+            .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+            .unwrap_or_default(),
+        // Preserve user preferences
+        preferred_language: if current_profile.preferred_language.is_empty() { "es".to_string() } else { current_profile.preferred_language },
+        tone: if current_profile.tone.is_empty() { "professional".to_string() } else { current_profile.tone },
+    };
+
+    // Auto-save the extracted profile
+    let data_dir = state.data_dir.read().await.clone();
+    let path = data_dir.join("profile.json");
+    let json = serde_json::to_string_pretty(&profile).map_err(|e| e.to_string())?;
+    fs::write(&path, &json).map_err(|e| format!("Failed to save profile: {e}"))?;
+
+    // Update state
+    *state.profile.write().await = profile.clone();
+
+    Ok(profile)
+}
+
 // ─── Jobs ──────────────────────────────────────────────────────────────────────
 
 #[tauri::command]

@@ -1,4 +1,4 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+#![windows_subsystem = "windows"]
 
 mod commands;
 mod document;
@@ -28,6 +28,7 @@ fn main() {
             commands::list_cvs,
             commands::upload_cv,
             commands::get_cv_content,
+            commands::extract_profile_from_cv,
             // Jobs
             commands::list_jobs,
             commands::add_job,

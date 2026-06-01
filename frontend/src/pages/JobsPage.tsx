@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
-import { listJobs, addJob, deleteJob, uploadCv, listCvs, scrapeJobUrl, type JobOffer, type CvInfo } from '../services/api';
-import { Plus, Trash2, Globe, FileText, Loader2, Upload, Briefcase } from 'lucide-react';
+import { listJobs, addJob, deleteJob, uploadCv, listCvs, extractProfileFromCv, type JobOffer, type CvInfo } from '../services/api';
+import { Plus, Trash2, Globe, FileText, Loader2, Upload, Briefcase, Sparkles } from 'lucide-react';
 
 export default function JobsPage() {
   const [jobs, setJobs] = useState<JobOffer[]>([]);
@@ -13,7 +13,9 @@ export default function JobsPage() {
   const [company, setCompany] = useState('');
   const [position, setPosition] = useState('');
   const [loading, setLoading] = useState(false);
+  const [extracting, setExtracting] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   useEffect(() => {
     loadJobs();
@@ -63,9 +65,22 @@ export default function JobsPage() {
     });
     if (selected) {
       try {
-        await uploadCv(selected as string);
+        const cv = await uploadCv(selected as string);
         const updated = await listCvs();
         setCvs(updated);
+        setSuccess(`CV "${cv.filename}" uploaded! Extracting profile with AI...`);
+        
+        // Auto-extract profile from CV
+        setExtracting(true);
+        try {
+          await extractProfileFromCv(cv.filename);
+          setSuccess(`Profile auto-filled from "${cv.filename}"!`);
+        } catch (e) {
+          setSuccess(`CV uploaded. Profile extraction failed: ${e}`);
+        } finally {
+          setExtracting(false);
+          setTimeout(() => setSuccess(''), 5000);
+        }
       } catch (e) {
         setError(String(e));
       }
@@ -74,13 +89,27 @@ export default function JobsPage() {
 
   return (
     <div className="p-8">
+      {/* Success/error banners */}
+      {success && (
+        <div className="mb-4 bg-green-500/10 border border-green-500/30 text-green-400 px-4 py-3 rounded-lg text-sm flex items-center gap-2">
+          {extracting && <Loader2 size={14} className="animate-spin" />}
+          <Sparkles size={14} />
+          {success}
+        </div>
+      )}
+      {error && (
+        <div className="mb-4 bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-lg text-sm">
+          {error}
+        </div>
+      )}
+
       {/* CVs section */}
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-800">Your CVs</h2>
+          <h2 className="text-lg font-semibold text-white">Your CVs</h2>
           <button
             onClick={handleUploadCv}
-            className="flex items-center gap-2 bg-gray-100 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-200 text-sm"
+            className="flex items-center gap-2 bg-navy-700 border border-navy-600 text-gray-300 px-3 py-2 rounded-lg hover:bg-navy-600 hover:text-white text-sm transition-colors"
           >
             <Upload size={16} />
             Upload CV
@@ -89,21 +118,25 @@ export default function JobsPage() {
         {cvs.length > 0 ? (
           <div className="flex flex-wrap gap-2">
             {cvs.map(cv => (
-              <div key={cv.filename} className="bg-white border rounded-lg px-3 py-2 text-sm flex items-center gap-2">
-                <FileText size={14} className="text-blue-500" />
+              <div key={cv.filename} className="bg-navy-800 border border-navy-700 rounded-lg px-3 py-2 text-sm flex items-center gap-2 text-gray-300">
+                <FileText size={14} className="text-blue-400" />
                 {cv.filename}
-                <span className="text-xs text-gray-400">({Math.round(cv.char_count / 1000)}k chars)</span>
+                <span className="text-xs text-gray-500">({Math.round(cv.char_count / 1000)}k chars)</span>
               </div>
             ))}
           </div>
         ) : (
-          <p className="text-sm text-gray-400">No CVs uploaded yet. Upload a PDF or DOCX.</p>
+          <div className="bg-navy-800 border border-navy-700 rounded-lg p-8 text-center">
+            <FileText size={32} className="mx-auto mb-2 text-gray-600" />
+            <p className="text-sm text-gray-400">No CVs uploaded yet.</p>
+            <p className="text-xs text-gray-500 mt-1">Upload a PDF or DOCX to auto-fill your profile with AI.</p>
+          </div>
         )}
       </div>
 
       {/* Jobs section */}
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">Job Offers</h1>
+        <h1 className="text-2xl font-bold text-white">Job Offers</h1>
         <button
           onClick={() => setShowAdd(!showAdd)}
           className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
@@ -115,21 +148,21 @@ export default function JobsPage() {
 
       {/* Add job form */}
       {showAdd && (
-        <div className="bg-white rounded-xl shadow-sm border p-6 mb-6">
-          <div className="flex gap-4 mb-4">
+        <div className="bg-navy-800 rounded-xl border border-navy-700 p-6 mb-6">
+          <div className="flex gap-3 mb-4">
             <button
               onClick={() => setInputMode('url')}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${
-                inputMode === 'url' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:bg-gray-100'
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                inputMode === 'url' ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-gray-400 border border-navy-600 hover:bg-navy-700'
               }`}
             >
               <Globe size={16} />
-              From URL (LinkedIn, InfoJobs, Indeed...)
+              From URL
             </button>
             <button
               onClick={() => setInputMode('manual')}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${
-                inputMode === 'manual' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:bg-gray-100'
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                inputMode === 'manual' ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-gray-400 border border-navy-600 hover:bg-navy-700'
               }`}
             >
               <FileText size={16} />
@@ -139,64 +172,62 @@ export default function JobsPage() {
 
           {inputMode === 'url' ? (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Job posting URL</label>
+              <label className="block text-sm font-medium text-gray-300 mb-1">Job posting URL</label>
               <input
                 type="url"
                 value={url}
                 onChange={e => setUrl(e.target.value)}
                 placeholder="https://www.linkedin.com/jobs/view/..."
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full bg-navy-900 border border-navy-600 rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
-              <p className="text-xs text-gray-400 mt-1">
-                Supports LinkedIn, InfoJobs, Indeed, and any job posting page. Content will be scraped automatically.
+              <p className="text-xs text-gray-500 mt-1.5">
+                Supports LinkedIn, InfoJobs, Indeed, and any job posting page.
               </p>
             </div>
           ) : (
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Company</label>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Company</label>
                   <input
                     type="text"
                     value={company}
                     onChange={e => setCompany(e.target.value)}
                     placeholder="ACME Corp"
-                    className="w-full border rounded-lg px-3 py-2 text-sm"
+                    className="w-full bg-navy-900 border border-navy-600 rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Position</label>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Position</label>
                   <input
                     type="text"
                     value={position}
                     onChange={e => setPosition(e.target.value)}
                     placeholder="Senior Developer"
-                    className="w-full border rounded-lg px-3 py-2 text-sm"
+                    className="w-full bg-navy-900 border border-navy-600 rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500"
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Job description</label>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Job description</label>
                 <textarea
                   value={rawDescription}
                   onChange={e => setRawDescription(e.target.value)}
                   placeholder="Paste the full job description here..."
                   rows={8}
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
+                  className="w-full bg-navy-900 border border-navy-600 rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500"
                 />
               </div>
             </div>
           )}
 
-          {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
-
           <button
             onClick={handleAdd}
             disabled={loading}
-            className="mt-4 flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50"
+            className="mt-4 flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
           >
             {loading ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
-            {loading ? 'Processing (scraping + AI analysis)...' : 'Save Job Offer'}
+            {loading ? 'Processing...' : 'Save Job Offer'}
           </button>
         </div>
       )}
@@ -204,27 +235,27 @@ export default function JobsPage() {
       {/* Job list */}
       <div className="space-y-3">
         {jobs.length === 0 ? (
-          <div className="text-center py-12 text-gray-400">
-            <Briefcase size={48} className="mx-auto mb-3 opacity-50" />
-            <p>No job offers yet. Add one to get started.</p>
+          <div className="text-center py-16">
+            <Briefcase size={48} className="mx-auto mb-3 text-gray-700" />
+            <p className="text-gray-400">No job offers yet. Add one to get started.</p>
           </div>
         ) : (
           jobs.map(job => (
-            <div key={job.id} className="bg-white rounded-xl shadow-sm border p-5 flex items-start justify-between">
+            <div key={job.id} className="bg-navy-800 rounded-xl border border-navy-700 p-5 flex items-start justify-between hover:border-navy-600 transition-colors">
               <div>
-                <h3 className="font-semibold text-gray-800">{job.position || 'Unknown Position'}</h3>
-                <p className="text-sm text-gray-500">{job.company || 'Unknown Company'}</p>
-                <div className="flex gap-3 mt-2 text-xs text-gray-400">
+                <h3 className="font-semibold text-white">{job.position || 'Unknown Position'}</h3>
+                <p className="text-sm text-gray-400">{job.company || 'Unknown Company'}</p>
+                <div className="flex gap-3 mt-2 text-xs text-gray-500">
                   {job.location && <span>{job.location}</span>}
-                  {job.source && <span className="bg-gray-100 px-2 py-0.5 rounded">{job.source}</span>}
+                  {job.source && <span className="bg-navy-700 px-2 py-0.5 rounded text-gray-400">{job.source}</span>}
                   {job.url && (
-                    <a href={job.url} target="_blank" className="text-blue-400 hover:underline">link</a>
+                    <a href={job.url} target="_blank" className="text-blue-400 hover:underline">view posting</a>
                   )}
                 </div>
               </div>
               <button
                 onClick={() => handleDelete(job.id)}
-                className="text-gray-400 hover:text-red-500 transition-colors"
+                className="text-gray-600 hover:text-red-400 transition-colors"
               >
                 <Trash2 size={18} />
               </button>
