@@ -316,3 +316,28 @@ export async function getDiscoveredJobs(
     `/autopilot/jobs${params}`
   );
 }
+
+export interface PipelineStatusInfo {
+  run_id: string | null;
+  status: 'idle' | 'running' | 'completed' | 'failed' | 'cancelled';
+  stage: string;
+  progress: number;
+  total: number;
+  message: string;
+  jobs_fetched: number;
+  jobs_filtered: number;
+  jobs_scored: number;
+  jobs_queued: number;
+}
+
+export async function runPipeline(): Promise<{ started: boolean; status: PipelineStatusInfo }> {
+  return autopilotSend('POST', '/autopilot/pipeline/run');
+}
+
+export async function cancelPipeline(): Promise<void> {
+  await autopilotSend('POST', '/autopilot/pipeline/cancel');
+}
+
+export async function getPipelineStatus(): Promise<PipelineStatusInfo> {
+  return autopilotGet<PipelineStatusInfo>('/autopilot/status');
+}
