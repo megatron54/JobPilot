@@ -1410,6 +1410,23 @@ El MVP entrega: **el usuario configura criterios → el sistema busca y puntúa 
 - **Pendiente Fase 1**: commit + PR a develop.
 - **Próximo paso**: Fase 2 (`feature/autopilot-discovery`) — cliente LinkedIn Voyager API con httpx.
 
+### 2026-06-30 — Fase 1 COMPLETADA + Fase 2 COMPLETADA
+- **Fase 1** mergeada a `develop` (PR #1, squash). Code review aplicado: fixes de SSRF en proxy, CORS restringido, stdout/stderr a log file.
+- **Fase 2** (`feature/autopilot-discovery`) mergeada a `develop` (PR #2, squash):
+  - `linkedin/client.py` — cliente httpx autenticado, errores tipados (SessionExpired/RateLimited/Challenge), nunca loguea cookies
+  - `linkedin/rate_limiter.py` — token bucket con jitter humano
+  - `linkedin/parsing.py` — helpers del formato normalizado Voyager
+  - `linkedin/search.py` — búsqueda + parseo de stubs
+  - `linkedin/details.py` — detalle + detección de apply method (easy/external)
+  - `linkedin/people.py` — búsqueda de recruiters
+  - `discovery.py` — orquestador search→dedup→persist→enrich con parada graceful
+  - `jobs_repository.py` — persistencia + deduplicación
+  - API: `POST /autopilot/discover`, `GET /autopilot/jobs`
+  - Frontend: `autopilotDiscover` + `getDiscoveredJobs`
+- **Tests**: 45 pasando (database, queue, session, API, parsing, search, details, repo, discovery, rate limiter).
+- **Decisión de release**: NO se tagea v1.x en `main` todavía. `main` se reserva para el primer milestone usable por el usuario (tras Fase 4, cuando exista UI). Se acumula en `develop` hasta entonces.
+- **Próximo paso**: Fase 3 (`feature/autopilot-matcher`) — pipeline de scoring con Ollama (pre-filtros + scoring + ranking).
+
 ---
 
 *Fin del documento. Mantener actualizado conforme avance la implementación.*
