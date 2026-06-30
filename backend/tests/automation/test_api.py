@@ -99,3 +99,31 @@ def test_pipeline_status_idle(client: TestClient) -> None:
     resp = client.get("/autopilot/status")
     assert resp.status_code == 200
     assert resp.json()["status"] == "idle"
+
+
+def test_jobs_empty(client: TestClient) -> None:
+    resp = client.get("/autopilot/jobs")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["jobs"] == []
+    assert body["total"] == 0
+
+
+def test_discover_requires_session(client: TestClient) -> None:
+    from app.automation.session import session as sess
+
+    sess.clear()
+    resp = client.post("/autopilot/discover")
+    assert resp.status_code == 400
+    assert "session" in resp.json()["detail"].lower()
+
+
+def test_discover_requires_keywords(client: TestClient) -> None:
+    from app.automation.session import session as sess
+
+    sess.set_cookies("tok", "ajax:1")
+    # No criteria saved yet -> no keywords
+    resp = client.post("/autopilot/discover")
+    assert resp.status_code == 400
+    assert "keyword" in resp.json()["detail"].lower()
+    sess.clear()
