@@ -71,14 +71,21 @@ class QueueManager:
     async def update_status(
         self, action_id: int, status: str, content_final: str | None = None
     ) -> bool:
+        # Stamp executed_at when an action reaches a terminal executed state so
+        # daily-limit counting (which filters on executed_at) works correctly.
+        stamp = status in ("completed", "failed", "skipped")
         if content_final is not None:
             await self._db.execute(
-                "UPDATE action_queue SET status = ?, content_final = ? WHERE id = ?",
+                "UPDATE action_queue SET status = ?, content_final = ?"
+                + (", executed_at = CURRENT_TIMESTAMP" if stamp else "")
+                + " WHERE id = ?",
                 (status, content_final, action_id),
             )
         else:
             await self._db.execute(
-                "UPDATE action_queue SET status = ? WHERE id = ?",
+                "UPDATE action_queue SET status = ?"
+                + (", executed_at = CURRENT_TIMESTAMP" if stamp else "")
+                + " WHERE id = ?",
                 (status, action_id),
             )
         await self._log(action_id, "status_change", json.dumps({"status": status}))

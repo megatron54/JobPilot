@@ -18,8 +18,8 @@ logger = logging.getLogger("jobpilot.autopilot.session")
 class LinkedInSession:
     """In-memory LinkedIn auth state."""
 
-    li_at: str = ""
-    jsessionid: str = ""
+    li_at: str = field(default="", repr=False)
+    jsessionid: str = field(default="", repr=False)
     _valid: bool | None = field(default=None)
 
     def set_cookies(self, li_at: str, jsessionid: str = "") -> None:

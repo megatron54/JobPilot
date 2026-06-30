@@ -266,6 +266,34 @@ async def execute_apply(payload: dict) -> dict:
     if row is None:
         raise HTTPException(status_code=404, detail="Job not found")
 
+    apply_type = "apply_easy" if row["apply_method"] == "easy_apply" else "apply_external"
+
+    # Approval gate: an apply action for this job must be approved by the user.
+    approved = await get_db().fetch_one(
+        """
+        SELECT 1 FROM action_queue
+        WHERE job_id = ? AND action_type IN ('apply_easy','apply_external')
+          AND status = 'approved' LIMIT 1
+        """,
+        (job_id,),
+    )
+    if approved is None:
+        raise HTTPException(
+            status_code=403,
+            detail="No approved application action for this job. Approve it in the queue first.",
+        )
+
+    # Daily limit gate.
+    from .limits import can_perform
+
+    cfg = store.load_config()
+    ok, reason = await can_perform(
+        get_db(), apply_type,
+        cfg.max_connections_per_day, cfg.max_messages_per_day, cfg.max_applies_per_day,
+    )
+    if not ok:
+        raise HTTPException(status_code=429, detail=reason)
+
     if row["apply_method"] == "easy_apply" and not session.has_session:
         raise HTTPException(status_code=400, detail="No LinkedIn session for Easy Apply")
 
@@ -285,6 +313,19 @@ async def execute_apply(payload: dict) -> dict:
         company=row["company"] or "",
         auto_submit=auto_submit,
     )
+
+    # Mark the approved apply action completed when actually submitted, so it
+    # counts against the daily applies limit.
+    if result.status in ("submitted", "filled_needs_review"):
+        await get_db().execute(
+            """
+            UPDATE action_queue SET status = 'completed', executed_at = CURRENT_TIMESTAMP
+            WHERE job_id = ? AND action_type IN ('apply_easy','apply_external')
+              AND status = 'approved'
+            """,
+            (job_id,),
+        )
+
     return {
         "job_id": result.job_id,
         "kind": result.kind,
@@ -332,3 +373,38 @@ async def reject_all() -> ApiResponse:
     qm = QueueManager(get_db())
     count = await qm.reject_all_pending()
     return ApiResponse(success=True, message=f"Rejected {count} actions")
+
+
+@app.post("/autopilot/queue/execute")
+async def execute_queue() -> dict:
+    """Execute approved connect/message actions (API-based) respecting limits.
+
+    Applications run separately via /autopilot/execute/apply so the user can
+    supervise the browser.
+    """
+    if not session.has_session:
+        raise HTTPException(status_code=400, detail="No LinkedIn session")
+
+    from .queue_builder import execute_approved_actions
+
+    cfg = store.load_config()
+    results = await execute_approved_actions(
+        get_db(), session,
+        max_connections=cfg.max_connections_per_day,
+        max_messages=cfg.max_messages_per_day,
+        max_applies=cfg.max_applies_per_day,
+    )
+    return results
+
+
+@app.get("/autopilot/usage")
+async def daily_usage() -> dict:
+    from .limits import usage_today
+
+    usage = await usage_today(get_db())
+    cfg = store.load_config()
+    return {
+        "connections": {"used": usage.connections, "limit": cfg.max_connections_per_day},
+        "messages": {"used": usage.messages, "limit": cfg.max_messages_per_day},
+        "applies": {"used": usage.applies, "limit": cfg.max_applies_per_day},
+    }
