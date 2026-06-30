@@ -1446,6 +1446,34 @@ El MVP entrega: **el usuario configura criterios → el sistema busca y puntúa 
 - **Estado**: MVP funcional. El usuario puede configurar criterios, arrancar el servicio, ejecutar discovery y revisar ofertas rankeadas con AI.
 - **Próximo paso**: Fase 5 (`feature/autopilot-applicator`) — ejecución: Easy Apply + form filler universal (Greenhouse/Lever API + Workday browser). Fase 6: conexiones + mensajes.
 
+### 2026-06-30 — Fase 5 + Fase 6 COMPLETADAS + Release v0.3.0 (SISTEMA COMPLETO)
+- **Fase 5** (`feature/autopilot-applicator`, PR #5) mergeada a `develop`:
+  - `executor/browser.py` — Playwright visible con inyección de cookies LinkedIn
+  - `executor/field_mapping.py` — detección de ATS + mapeo perfil→campos (funciones puras)
+  - `executor/easy_apply.py` — flujo Easy Apply multi-paso, pausa antes de submit
+  - `executor/answers.py` — respuestas LLM a preguntas custom + selección de opciones
+  - `executor/form_filler/detector.py` — clasificación de campos (heurística word-boundary + LLM)
+  - `executor/form_filler/filler.py` — filler universal con detección de CAPTCHA/account-wall
+  - `executor/applicator.py` — enruta Easy Apply vs externo por ATS
+  - `cv_locator.py` — localiza CV + texto extraído
+  - API: `POST /autopilot/execute/apply`
+- **Fase 6** (`feature/autopilot-connector`, PR #6) mergeada a `develop`:
+  - `executor/connector.py` — conexiones + mensajes via Voyager API
+  - `content.py` — generación de cartas + mensajes a recruiter (Ollama)
+  - `limits.py` — límites diarios (conexiones/mensajes/aplicaciones) desde DB
+  - `queue_builder.py` — construye cola de acciones + ejecuta aprobadas respetando límites
+  - `AutopilotQueuePage.tsx` — UI de revisión/edición/aprobación/ejecución (sub-agente)
+  - API: `POST /autopilot/queue/execute`, `GET /autopilot/usage`
+- **Security review** (sub-agente security-reviewer) → **fixes críticos aplicados**:
+  - C1: `executed_at` ahora se setea (los límites de mensajes/aplicaciones contaban siempre 0 = riesgo de ban)
+  - C2: `/execute/apply` exige acción aprobada + check de límite diario
+  - H1/H2/H3: race de conexión, parseo robusto de URL, anti-inyección JS
+  - M1/M2/M3/M5: timezone localtime, cookies repr=False, dedup recruiters, sanitización de notas
+- **Tests**: 89 backend (todos pasando), ruff limpio, tsc + vite build limpios.
+- **Release v0.3.0**: SISTEMA AUTOPILOT COMPLETO (Fases 1-6). Versiones a 0.3.0, merge a `main` con tag `v0.3.0`.
+- **Estado FINAL**: el sistema completo funciona end-to-end: discovery → matching → generación → cola de revisión → ejecución supervisada (apply/connect/message) con confirmación del usuario y límites de seguridad.
+- **Pendiente para producción**: testing real con cuenta fake (POC), instalación de browsers Playwright (`playwright install chromium`), scheduler diario (APScheduler), ajuste de selectores LinkedIn según cambios de UI.
+
 ---
 
 *Fin del documento. Mantener actualizado conforme avance la implementación.*
