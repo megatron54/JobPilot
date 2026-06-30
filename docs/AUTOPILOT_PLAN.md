@@ -1387,6 +1387,29 @@ El MVP entrega: **el usuario configura criterios → el sistema busca y puntúa 
 - Plan maestro consolidado en este documento
 - **Próximo paso**: iniciar Fase 1 (`feature/autopilot-engine`) — migración Git + servicio Python base
 
+### 2026-06-29 — Fase 1 (en progreso): `feature/autopilot-engine`
+- **Git**: migración `master`→`main`+`develop` completada. `develop` es default en GitHub. `master` eliminado. Rama `feature/autopilot-engine` creada.
+- **Servicio Python** (`backend/app/automation/`): creado y funcional.
+  - `config.py` — settings con prefijo `AUTOPILOT_`
+  - `database.py` + `schema.sql` — SQLite + aiosqlite, WAL mode, 9 tablas, versionado de schema
+  - `models.py` — modelos Pydantic (sesión, criterios, config, cola, pipeline)
+  - `session.py` — estado de cookies LinkedIn (li_at + JSESSIONID→csrf)
+  - `queue_manager.py` — CRUD de la cola de acciones
+  - `store.py` — persistencia JSON de criterios/config
+  - `main.py` — FastAPI app en :8765 (health, shutdown, session, settings, queue, status)
+- **Tests**: 21 tests pasando (database, queue, session, API). pytest-asyncio.
+- **Bridge Rust/Tauri**:
+  - `linkedin.rs` extendido — `get_linkedin_cookies()` extrae li_at + JSESSIONID
+  - `autopilot.rs` — spawn del proceso Python, health check, pick_port, wait_until_ready, send_cookies, graceful_shutdown
+  - `autopilot_bridge.rs` — comandos Tauri (start/stop/status/refresh_cookies + proxy get/send)
+  - `main.rs` — módulos registrados, AutopilotService managed, cleanup en RunEvent::Exit
+  - `Cargo.toml` — añadido `which = "7"`
+  - **cargo check OK**, clippy limpio (en archivos nuevos)
+- **Frontend**: `api.ts` extendido con tipos y wrappers del autopilot. `tsc --noEmit` OK.
+- **Verificado**: servicio arranca con uvicorn, /health y /autopilot/session responden correctamente.
+- **Pendiente Fase 1**: commit + PR a develop.
+- **Próximo paso**: Fase 2 (`feature/autopilot-discovery`) — cliente LinkedIn Voyager API con httpx.
+
 ---
 
 *Fin del documento. Mantener actualizado conforme avance la implementación.*

@@ -5,6 +5,8 @@ __pycache__/
 dist/
 .venv/
 venv/
+.pytest_cache/
+.ruff_cache/
 
 # Node
 node_modules/
@@ -28,6 +30,14 @@ data/jobs/*
 !data/jobs/.gitkeep
 data/outputs/*
 !data/outputs/.gitkeep
+
+# Autopilot runtime state
+data/autopilot.db
+data/autopilot.db-wal
+data/autopilot.db-shm
+data/search_criteria.json
+data/autopilot_config.json
+data/autopilot.log
 
 # OS
 .DS_Store
