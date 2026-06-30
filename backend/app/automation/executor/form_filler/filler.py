@@ -119,7 +119,9 @@ async def _label_text(page, handle) -> str:
         return await handle.evaluate(
             """el => {
                 if (el.id) {
-                    const l = document.querySelector(`label[for="${el.id}"]`);
+                    const l = document.getElementById(el.id)
+                        ? document.querySelector('label[for="' + CSS.escape(el.id) + '"]')
+                        : null;
                     if (l) return l.innerText;
                 }
                 const p = el.closest('label');

@@ -8,7 +8,9 @@ docs/AUTOPILOT_PLAN.md sections 7 and 10.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
+from urllib.parse import urlparse
 
 from ..linkedin.client import LinkedInClient, LinkedInError
 from ..session import LinkedInSession
@@ -20,6 +22,9 @@ _MESSAGE_PATH = "/messaging/conversations?action=create"
 
 MAX_NOTE_CHARS = 300
 
+# Valid LinkedIn public identifier / member URN shape.
+_VALID_ID = re.compile(r"^[A-Za-z0-9_\-]{2,120}$")
+
 
 @dataclass
 class ConnectOutcome:
@@ -28,15 +33,38 @@ class ConnectOutcome:
 
 
 def _profile_id_from_url(profile_url: str) -> str:
-    """Extract the public identifier from a /in/{id}/ URL."""
+    """Extract the public identifier from a '/in/{id}/' URL, robustly.
+
+    Parses only the path component (ignoring query/fragment) and validates the
+    extracted id to avoid targeting the wrong person.
+    """
     if not profile_url:
         return ""
-    parts = [p for p in profile_url.rstrip("/").split("/") if p]
+    # Allow passing a bare id/URN directly.
+    if "/" not in profile_url and _VALID_ID.match(profile_url):
+        return profile_url
+
+    path = urlparse(profile_url).path
+    parts = [p for p in path.split("/") if p]
+    candidate = ""
     if "in" in parts:
         idx = parts.index("in")
         if idx + 1 < len(parts):
-            return parts[idx + 1]
-    return parts[-1] if parts else ""
+            candidate = parts[idx + 1]
+    if not candidate:
+        return ""
+    return candidate if _VALID_ID.match(candidate) else ""
+
+
+_URL_RE = re.compile(r"https?://\S+|www\.\S+", re.IGNORECASE)
+_EMAIL_RE = re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]+\b")
+
+
+def _sanitize_note(note: str) -> str:
+    """Strip URLs and emails - LinkedIn flags connection notes that contain them."""
+    cleaned = _URL_RE.sub("", note or "")
+    cleaned = _EMAIL_RE.sub("", cleaned)
+    return " ".join(cleaned.split()).strip()
 
 
 async def send_connection_request(
@@ -46,12 +74,12 @@ async def send_connection_request(
 ) -> ConnectOutcome:
     """Send a connection invitation with an optional note (<=300 chars).
 
-    `profile_urn` is the member URN/id (e.g. 'ACoAAB...'). The note is truncated
-    to LinkedIn's limit.
+    `profile_urn` is the member URN/id (e.g. 'ACoAAB...'). The note is sanitized
+    (no URLs/emails) and truncated to LinkedIn's limit.
     """
     if not profile_urn:
         return ConnectOutcome("invalid", "Missing profile id")
-    note = (note or "").strip()[:MAX_NOTE_CHARS]
+    note = _sanitize_note(note)[:MAX_NOTE_CHARS]
 
     body = {
         "invitee": {

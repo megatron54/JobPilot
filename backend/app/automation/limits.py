@@ -20,19 +20,21 @@ class DailyUsage:
 
 async def usage_today(db: Database) -> DailyUsage:
     connections = await _count_today(
-        db, "SELECT COUNT(*) AS c FROM connections_sent WHERE date(sent_at) = date('now')"
+        db,
+        "SELECT COUNT(*) AS c FROM connections_sent "
+        "WHERE date(sent_at, 'localtime') = date('now', 'localtime')",
     )
     messages = await _count_today(
         db,
         "SELECT COUNT(*) AS c FROM action_queue "
         "WHERE action_type='message' AND status='completed' "
-        "AND date(executed_at) = date('now')",
+        "AND date(executed_at, 'localtime') = date('now', 'localtime')",
     )
     applies = await _count_today(
         db,
         "SELECT COUNT(*) AS c FROM action_queue "
         "WHERE action_type IN ('apply_easy','apply_external') AND status='completed' "
-        "AND date(executed_at) = date('now')",
+        "AND date(executed_at, 'localtime') = date('now', 'localtime')",
     )
     return DailyUsage(connections=connections, messages=messages, applies=applies)
 

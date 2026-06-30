@@ -266,6 +266,34 @@ async def execute_apply(payload: dict) -> dict:
     if row is None:
         raise HTTPException(status_code=404, detail="Job not found")
 
+    apply_type = "apply_easy" if row["apply_method"] == "easy_apply" else "apply_external"
+
+    # Approval gate: an apply action for this job must be approved by the user.
+    approved = await get_db().fetch_one(
+        """
+        SELECT 1 FROM action_queue
+        WHERE job_id = ? AND action_type IN ('apply_easy','apply_external')
+          AND status = 'approved' LIMIT 1
+        """,
+        (job_id,),
+    )
+    if approved is None:
+        raise HTTPException(
+            status_code=403,
+            detail="No approved application action for this job. Approve it in the queue first.",
+        )
+
+    # Daily limit gate.
+    from .limits import can_perform
+
+    cfg = store.load_config()
+    ok, reason = await can_perform(
+        get_db(), apply_type,
+        cfg.max_connections_per_day, cfg.max_messages_per_day, cfg.max_applies_per_day,
+    )
+    if not ok:
+        raise HTTPException(status_code=429, detail=reason)
+
     if row["apply_method"] == "easy_apply" and not session.has_session:
         raise HTTPException(status_code=400, detail="No LinkedIn session for Easy Apply")
 
@@ -285,6 +313,19 @@ async def execute_apply(payload: dict) -> dict:
         company=row["company"] or "",
         auto_submit=auto_submit,
     )
+
+    # Mark the approved apply action completed when actually submitted, so it
+    # counts against the daily applies limit.
+    if result.status in ("submitted", "filled_needs_review"):
+        await get_db().execute(
+            """
+            UPDATE action_queue SET status = 'completed', executed_at = CURRENT_TIMESTAMP
+            WHERE job_id = ? AND action_type IN ('apply_easy','apply_external')
+              AND status = 'approved'
+            """,
+            (job_id,),
+        )
+
     return {
         "job_id": result.job_id,
         "kind": result.kind,
