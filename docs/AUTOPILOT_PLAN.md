@@ -1427,6 +1427,25 @@ El MVP entrega: **el usuario configura criterios → el sistema busca y puntúa 
 - **Decisión de release**: NO se tagea v1.x en `main` todavía. `main` se reserva para el primer milestone usable por el usuario (tras Fase 4, cuando exista UI). Se acumula en `develop` hasta entonces.
 - **Próximo paso**: Fase 3 (`feature/autopilot-matcher`) — pipeline de scoring con Ollama (pre-filtros + scoring + ranking).
 
+### 2026-06-30 — Fase 3 + Fase 4 COMPLETADAS + Release v0.2.0
+- **Fase 3** (`feature/autopilot-matcher`, PR #3) mergeada a `develop`:
+  - `pipeline/prefilter.py` — eliminación por reglas (blacklist, keywords, workplace, gap de experiencia), sin LLM
+  - `pipeline/llm.py` — cliente Ollama con salida JSON estructurada (format=schema, temp 0)
+  - `pipeline/scorer.py` — scoring 0-100 con razones, deal-breakers, missing skills
+  - `pipeline/orchestrator.py` — discover→filter→score→rank, concurrencia limitada, cancelación
+  - `pipeline/state.py` — estado de progreso compartido
+  - `profile.py` — carga del perfil del usuario
+  - API: `POST /autopilot/pipeline/run` (background), `/cancel`, SSE `/events`, `/status` real
+- **Fase 4** (`feature/autopilot-dashboard`, PR #4) mergeada a `develop` (construida con sub-agente):
+  - `AutopilotPage.tsx` — banner de estado servicio/sesión, Run Discovery con polling de progreso (1s), matches rankeados
+  - `AutopilotSettingsPage.tsx` — formulario de criterios + config (schedule, límites, threshold)
+  - `JobMatchCard.tsx` — badge de score por niveles, chips, link a recruiter, expandible
+  - `App.tsx` — rutas `/autopilot` + `/autopilot/settings` + nav
+- **Tests**: 58 backend (todos pasando), ruff limpio, tsc limpio, vite build OK.
+- **Release v0.2.0**: MVP usable (discovery + matching + dashboard). Versiones bumpeadas a 0.2.0. Mergeado a `main` con tag `v0.2.0`.
+- **Estado**: MVP funcional. El usuario puede configurar criterios, arrancar el servicio, ejecutar discovery y revisar ofertas rankeadas con AI.
+- **Próximo paso**: Fase 5 (`feature/autopilot-applicator`) — ejecución: Easy Apply + form filler universal (Greenhouse/Lever API + Workday browser). Fase 6: conexiones + mensajes.
+
 ---
 
 *Fin del documento. Mantener actualizado conforme avance la implementación.*
