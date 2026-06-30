@@ -1387,6 +1387,65 @@ El MVP entrega: **el usuario configura criterios → el sistema busca y puntúa 
 - Plan maestro consolidado en este documento
 - **Próximo paso**: iniciar Fase 1 (`feature/autopilot-engine`) — migración Git + servicio Python base
 
+### 2026-06-29 — Fase 1 (en progreso): `feature/autopilot-engine`
+- **Git**: migración `master`→`main`+`develop` completada. `develop` es default en GitHub. `master` eliminado. Rama `feature/autopilot-engine` creada.
+- **Servicio Python** (`backend/app/automation/`): creado y funcional.
+  - `config.py` — settings con prefijo `AUTOPILOT_`
+  - `database.py` + `schema.sql` — SQLite + aiosqlite, WAL mode, 9 tablas, versionado de schema
+  - `models.py` — modelos Pydantic (sesión, criterios, config, cola, pipeline)
+  - `session.py` — estado de cookies LinkedIn (li_at + JSESSIONID→csrf)
+  - `queue_manager.py` — CRUD de la cola de acciones
+  - `store.py` — persistencia JSON de criterios/config
+  - `main.py` — FastAPI app en :8765 (health, shutdown, session, settings, queue, status)
+- **Tests**: 21 tests pasando (database, queue, session, API). pytest-asyncio.
+- **Bridge Rust/Tauri**:
+  - `linkedin.rs` extendido — `get_linkedin_cookies()` extrae li_at + JSESSIONID
+  - `autopilot.rs` — spawn del proceso Python, health check, pick_port, wait_until_ready, send_cookies, graceful_shutdown
+  - `autopilot_bridge.rs` — comandos Tauri (start/stop/status/refresh_cookies + proxy get/send)
+  - `main.rs` — módulos registrados, AutopilotService managed, cleanup en RunEvent::Exit
+  - `Cargo.toml` — añadido `which = "7"`
+  - **cargo check OK**, clippy limpio (en archivos nuevos)
+- **Frontend**: `api.ts` extendido con tipos y wrappers del autopilot. `tsc --noEmit` OK.
+- **Verificado**: servicio arranca con uvicorn, /health y /autopilot/session responden correctamente.
+- **Pendiente Fase 1**: commit + PR a develop.
+- **Próximo paso**: Fase 2 (`feature/autopilot-discovery`) — cliente LinkedIn Voyager API con httpx.
+
+### 2026-06-30 — Fase 1 COMPLETADA + Fase 2 COMPLETADA
+- **Fase 1** mergeada a `develop` (PR #1, squash). Code review aplicado: fixes de SSRF en proxy, CORS restringido, stdout/stderr a log file.
+- **Fase 2** (`feature/autopilot-discovery`) mergeada a `develop` (PR #2, squash):
+  - `linkedin/client.py` — cliente httpx autenticado, errores tipados (SessionExpired/RateLimited/Challenge), nunca loguea cookies
+  - `linkedin/rate_limiter.py` — token bucket con jitter humano
+  - `linkedin/parsing.py` — helpers del formato normalizado Voyager
+  - `linkedin/search.py` — búsqueda + parseo de stubs
+  - `linkedin/details.py` — detalle + detección de apply method (easy/external)
+  - `linkedin/people.py` — búsqueda de recruiters
+  - `discovery.py` — orquestador search→dedup→persist→enrich con parada graceful
+  - `jobs_repository.py` — persistencia + deduplicación
+  - API: `POST /autopilot/discover`, `GET /autopilot/jobs`
+  - Frontend: `autopilotDiscover` + `getDiscoveredJobs`
+- **Tests**: 45 pasando (database, queue, session, API, parsing, search, details, repo, discovery, rate limiter).
+- **Decisión de release**: NO se tagea v1.x en `main` todavía. `main` se reserva para el primer milestone usable por el usuario (tras Fase 4, cuando exista UI). Se acumula en `develop` hasta entonces.
+- **Próximo paso**: Fase 3 (`feature/autopilot-matcher`) — pipeline de scoring con Ollama (pre-filtros + scoring + ranking).
+
+### 2026-06-30 — Fase 3 + Fase 4 COMPLETADAS + Release v0.2.0
+- **Fase 3** (`feature/autopilot-matcher`, PR #3) mergeada a `develop`:
+  - `pipeline/prefilter.py` — eliminación por reglas (blacklist, keywords, workplace, gap de experiencia), sin LLM
+  - `pipeline/llm.py` — cliente Ollama con salida JSON estructurada (format=schema, temp 0)
+  - `pipeline/scorer.py` — scoring 0-100 con razones, deal-breakers, missing skills
+  - `pipeline/orchestrator.py` — discover→filter→score→rank, concurrencia limitada, cancelación
+  - `pipeline/state.py` — estado de progreso compartido
+  - `profile.py` — carga del perfil del usuario
+  - API: `POST /autopilot/pipeline/run` (background), `/cancel`, SSE `/events`, `/status` real
+- **Fase 4** (`feature/autopilot-dashboard`, PR #4) mergeada a `develop` (construida con sub-agente):
+  - `AutopilotPage.tsx` — banner de estado servicio/sesión, Run Discovery con polling de progreso (1s), matches rankeados
+  - `AutopilotSettingsPage.tsx` — formulario de criterios + config (schedule, límites, threshold)
+  - `JobMatchCard.tsx` — badge de score por niveles, chips, link a recruiter, expandible
+  - `App.tsx` — rutas `/autopilot` + `/autopilot/settings` + nav
+- **Tests**: 58 backend (todos pasando), ruff limpio, tsc limpio, vite build OK.
+- **Release v0.2.0**: MVP usable (discovery + matching + dashboard). Versiones bumpeadas a 0.2.0. Mergeado a `main` con tag `v0.2.0`.
+- **Estado**: MVP funcional. El usuario puede configurar criterios, arrancar el servicio, ejecutar discovery y revisar ofertas rankeadas con AI.
+- **Próximo paso**: Fase 5 (`feature/autopilot-applicator`) — ejecución: Easy Apply + form filler universal (Greenhouse/Lever API + Workday browser). Fase 6: conexiones + mensajes.
+
 ---
 
 *Fin del documento. Mantener actualizado conforme avance la implementación.*

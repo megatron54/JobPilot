@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom';
-import { Briefcase, FileText, User, Home } from 'lucide-react';
+import { Briefcase, FileText, User, Home, Rocket, Settings } from 'lucide-react';
 import { setup, type SetupStatus } from './services/api';
 import Dashboard from './pages/Dashboard';
 import JobsPage from './pages/JobsPage';
 import GeneratePage from './pages/GeneratePage';
 import ProfilePage from './pages/ProfilePage';
+import AutopilotPage from './pages/AutopilotPage';
+import AutopilotSettingsPage from './pages/AutopilotSettingsPage';
 
 /** The JP speed-mark as inline SVG — derived from Logo.png monogram colors */
 function JPMark({ size = 32, className = '' }: { size?: number; className?: string }) {
@@ -97,6 +99,8 @@ function App() {
           {/* Navigation */}
           <div className="flex-1 px-3 py-4 space-y-0.5">
             <NavItem to="/" icon={<Home size={17} />} label="Dashboard" />
+            <NavItem to="/autopilot" icon={<Rocket size={17} />} label="Autopilot" end />
+            <NavItem to="/autopilot/settings" icon={<Settings size={17} />} label="AP Settings" />
             <NavItem to="/jobs" icon={<Briefcase size={17} />} label="Job Offers" />
             <NavItem to="/generate" icon={<FileText size={17} />} label="Generate" />
             <NavItem to="/profile" icon={<User size={17} />} label="Profile & CV" />
@@ -117,6 +121,8 @@ function App() {
         <main className="flex-1 overflow-y-auto">
           <Routes>
             <Route path="/" element={<Dashboard />} />
+            <Route path="/autopilot" element={<AutopilotPage />} />
+            <Route path="/autopilot/settings" element={<AutopilotSettingsPage />} />
             <Route path="/jobs" element={<JobsPage />} />
             <Route path="/generate" element={<GeneratePage />} />
             <Route path="/profile" element={<ProfilePage />} />
@@ -127,10 +133,11 @@ function App() {
   );
 }
 
-function NavItem({ to, icon, label }: { to: string; icon: React.ReactNode; label: string }) {
+function NavItem({ to, icon, label, end }: { to: string; icon: React.ReactNode; label: string; end?: boolean }) {
   return (
     <NavLink
       to={to}
+      end={end}
       className={({ isActive }) =>
         `flex items-center gap-3 px-3 py-2 rounded-lg transition-all text-[13px] font-medium ${
           isActive 

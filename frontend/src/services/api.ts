@@ -172,3 +172,172 @@ export async function generateInterviewAnswer(request: {
 export async function generateInterviewQuestions(): Promise<GeneratedContent> {
   return invoke('generate_interview_questions');
 }
+
+// ─── Autopilot ─────────────────────────────────────────────────────
+
+export interface AutopilotStatus {
+  spawned: boolean;
+  healthy: boolean;
+  port: number;
+  session: {
+    has_session: boolean;
+    li_at_present?: boolean;
+    jsessionid_present?: boolean;
+    valid?: boolean | null;
+  };
+}
+
+export interface SearchCriteria {
+  keywords: string[];
+  location: string;
+  geo_id: string;
+  remote: boolean;
+  hybrid: boolean;
+  onsite: boolean;
+  experience_levels: string[];
+  job_types: string[];
+  posted_within_hours: number;
+  excluded_companies: string[];
+  required_keywords: string[];
+  excluded_keywords: string[];
+}
+
+export interface AutopilotConfig {
+  enabled: boolean;
+  schedule_hour: number;
+  schedule_minute: number;
+  schedule_days: number[];
+  max_connections_per_day: number;
+  max_messages_per_day: number;
+  max_applies_per_day: number;
+  score_threshold: number;
+  top_n_generate: number;
+}
+
+export interface QueueAction {
+  id: number;
+  job_id: string;
+  action_type: 'apply_easy' | 'apply_external' | 'connect' | 'message';
+  status: string;
+  priority: number;
+  content_draft: string;
+  content_final: string;
+  target_profile_url: string;
+}
+
+// Lifecycle
+export async function autopilotStart(): Promise<{ running: boolean; port: number; cookies: string }> {
+  return invoke('autopilot_start');
+}
+
+export async function autopilotStop(): Promise<boolean> {
+  return invoke('autopilot_stop');
+}
+
+export async function autopilotStatus(): Promise<AutopilotStatus> {
+  return invoke('autopilot_status');
+}
+
+export async function autopilotRefreshCookies(): Promise<{
+  li_at_present: boolean;
+  jsessionid_present: boolean;
+}> {
+  return invoke('autopilot_refresh_cookies');
+}
+
+// Generic proxy helpers to the Python service
+export async function autopilotGet<T = unknown>(path: string): Promise<T> {
+  return invoke('autopilot_get', { path });
+}
+
+export async function autopilotSend<T = unknown>(
+  method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+  path: string,
+  body?: unknown
+): Promise<T> {
+  return invoke('autopilot_send', { method, path, body });
+}
+
+// Typed convenience wrappers
+export async function getSearchCriteria(): Promise<SearchCriteria> {
+  return autopilotGet<SearchCriteria>('/autopilot/settings/criteria');
+}
+
+export async function saveSearchCriteria(criteria: SearchCriteria): Promise<void> {
+  await autopilotSend('PUT', '/autopilot/settings/criteria', criteria);
+}
+
+export async function getAutopilotConfig(): Promise<AutopilotConfig> {
+  return autopilotGet<AutopilotConfig>('/autopilot/settings/config');
+}
+
+export async function saveAutopilotConfig(config: AutopilotConfig): Promise<void> {
+  await autopilotSend('PUT', '/autopilot/settings/config', config);
+}
+
+export async function getQueue(): Promise<{ actions: QueueAction[] }> {
+  return autopilotGet<{ actions: QueueAction[] }>('/autopilot/queue');
+}
+
+export interface DiscoveredJobRow {
+  job_id: string;
+  title: string;
+  company: string;
+  location: string;
+  workplace_type: string;
+  apply_method: string;
+  external_url: string;
+  score: number | null;
+  recommendation: string;
+  recruiter_name: string;
+  recruiter_url: string;
+  status: string;
+  discovered_at?: string;
+}
+
+export interface DiscoveryResult {
+  fetched: number;
+  new: number;
+  detailed: number;
+  errors: number;
+  stopped_reason: string;
+}
+
+export async function autopilotDiscover(): Promise<DiscoveryResult> {
+  return autopilotSend<DiscoveryResult>('POST', '/autopilot/discover');
+}
+
+export async function getDiscoveredJobs(
+  limit = 50,
+  scoredOnly = false
+): Promise<{ jobs: DiscoveredJobRow[]; total: number }> {
+  const params = `?limit=${limit}&scored_only=${scoredOnly}`;
+  return autopilotGet<{ jobs: DiscoveredJobRow[]; total: number }>(
+    `/autopilot/jobs${params}`
+  );
+}
+
+export interface PipelineStatusInfo {
+  run_id: string | null;
+  status: 'idle' | 'running' | 'completed' | 'failed' | 'cancelled';
+  stage: string;
+  progress: number;
+  total: number;
+  message: string;
+  jobs_fetched: number;
+  jobs_filtered: number;
+  jobs_scored: number;
+  jobs_queued: number;
+}
+
+export async function runPipeline(): Promise<{ started: boolean; status: PipelineStatusInfo }> {
+  return autopilotSend('POST', '/autopilot/pipeline/run');
+}
+
+export async function cancelPipeline(): Promise<void> {
+  await autopilotSend('POST', '/autopilot/pipeline/cancel');
+}
+
+export async function getPipelineStatus(): Promise<PipelineStatusInfo> {
+  return autopilotGet<PipelineStatusInfo>('/autopilot/status');
+}
