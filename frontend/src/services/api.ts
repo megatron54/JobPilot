@@ -341,3 +341,57 @@ export async function cancelPipeline(): Promise<void> {
 export async function getPipelineStatus(): Promise<PipelineStatusInfo> {
   return autopilotGet<PipelineStatusInfo>('/autopilot/status');
 }
+
+export interface ExecutionResult {
+  job_id: string;
+  kind: string;
+  status: string;
+  detail: string;
+  ats: string;
+}
+
+export async function executeApply(
+  jobId: string,
+  autoSubmit = false
+): Promise<ExecutionResult> {
+  return autopilotSend<ExecutionResult>('POST', '/autopilot/execute/apply', {
+    job_id: jobId,
+    auto_submit: autoSubmit,
+  });
+}
+
+// ─── Action Queue ──────────────────────────────────────────────────
+
+export interface DailyUsage {
+  connections: { used: number; limit: number };
+  messages: { used: number; limit: number };
+  applies: { used: number; limit: number };
+}
+
+export async function updateQueueAction(
+  id: number,
+  update: { status?: 'approved' | 'rejected' | 'edited'; content_final?: string }
+): Promise<void> {
+  await autopilotSend('PATCH', `/autopilot/queue/${id}`, update);
+}
+
+export async function approveAllQueue(): Promise<void> {
+  await autopilotSend('POST', '/autopilot/queue/approve-all');
+}
+
+export async function rejectAllQueue(): Promise<void> {
+  await autopilotSend('POST', '/autopilot/queue/reject-all');
+}
+
+export async function executeQueue(): Promise<{
+  connected: number;
+  messaged: number;
+  skipped: number;
+  failed: number;
+}> {
+  return autopilotSend('POST', '/autopilot/queue/execute');
+}
+
+export async function getDailyUsage(): Promise<DailyUsage> {
+  return autopilotGet<DailyUsage>('/autopilot/usage');
+}

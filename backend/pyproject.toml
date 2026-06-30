@@ -1,6 +1,6 @@
 [project]
 name = "jobpilot"
-version = "0.2.0"
+version = "0.3.0"
 description = "AI-powered job application assistant using local LLMs"
 requires-python = ">=3.12"
 dependencies = [
@@ -23,6 +23,9 @@ dependencies = [
 scraping = [
     "playwright>=1.44",
     "playwright-stealth>=1.0.6",
+]
+executor = [
+    "playwright>=1.44",
 ]
 automation = [
     "apscheduler>=3.11",

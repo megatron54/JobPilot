@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom';
-import { Briefcase, FileText, User, Home, Rocket, Settings } from 'lucide-react';
+import { Briefcase, FileText, User, Home, Rocket, Settings, ListChecks } from 'lucide-react';
 import { setup, type SetupStatus } from './services/api';
 import Dashboard from './pages/Dashboard';
 import JobsPage from './pages/JobsPage';
 import GeneratePage from './pages/GeneratePage';
 import ProfilePage from './pages/ProfilePage';
 import AutopilotPage from './pages/AutopilotPage';
+import AutopilotQueuePage from './pages/AutopilotQueuePage';
 import AutopilotSettingsPage from './pages/AutopilotSettingsPage';
 
 /** The JP speed-mark as inline SVG — derived from Logo.png monogram colors */
@@ -100,6 +101,7 @@ function App() {
           <div className="flex-1 px-3 py-4 space-y-0.5">
             <NavItem to="/" icon={<Home size={17} />} label="Dashboard" />
             <NavItem to="/autopilot" icon={<Rocket size={17} />} label="Autopilot" end />
+            <NavItem to="/autopilot/queue" icon={<ListChecks size={17} />} label="Action Queue" />
             <NavItem to="/autopilot/settings" icon={<Settings size={17} />} label="AP Settings" />
             <NavItem to="/jobs" icon={<Briefcase size={17} />} label="Job Offers" />
             <NavItem to="/generate" icon={<FileText size={17} />} label="Generate" />
@@ -122,6 +124,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/autopilot" element={<AutopilotPage />} />
+            <Route path="/autopilot/queue" element={<AutopilotQueuePage />} />
             <Route path="/autopilot/settings" element={<AutopilotSettingsPage />} />
             <Route path="/jobs" element={<JobsPage />} />
             <Route path="/generate" element={<GeneratePage />} />

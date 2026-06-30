@@ -98,6 +98,17 @@ async def run_pipeline(
         result.qualified = len(qualified)
         state.jobs_queued = len(qualified)
 
+        # Stage 5: build the action queue (content + pending actions) for top jobs
+        if not state.cancelled and qualified:
+            state.update("generate", 0, 0, "Preparing applications...")
+            from ..queue_builder import build_queue_for_top_jobs
+
+            await build_queue_for_top_jobs(
+                db, profile,
+                top_n=settings.top_n_generate,
+                min_score=float(settings.score_threshold),
+            )
+
         state.finish("completed", f"{result.qualified} jobs qualified")
         logger.info(
             "Pipeline %s done: fetched=%d new=%d filtered_out=%d scored=%d qualified=%d",
