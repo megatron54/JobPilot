@@ -332,3 +332,38 @@ async def reject_all() -> ApiResponse:
     qm = QueueManager(get_db())
     count = await qm.reject_all_pending()
     return ApiResponse(success=True, message=f"Rejected {count} actions")
+
+
+@app.post("/autopilot/queue/execute")
+async def execute_queue() -> dict:
+    """Execute approved connect/message actions (API-based) respecting limits.
+
+    Applications run separately via /autopilot/execute/apply so the user can
+    supervise the browser.
+    """
+    if not session.has_session:
+        raise HTTPException(status_code=400, detail="No LinkedIn session")
+
+    from .queue_builder import execute_approved_actions
+
+    cfg = store.load_config()
+    results = await execute_approved_actions(
+        get_db(), session,
+        max_connections=cfg.max_connections_per_day,
+        max_messages=cfg.max_messages_per_day,
+        max_applies=cfg.max_applies_per_day,
+    )
+    return results
+
+
+@app.get("/autopilot/usage")
+async def daily_usage() -> dict:
+    from .limits import usage_today
+
+    usage = await usage_today(get_db())
+    cfg = store.load_config()
+    return {
+        "connections": {"used": usage.connections, "limit": cfg.max_connections_per_day},
+        "messages": {"used": usage.messages, "limit": cfg.max_messages_per_day},
+        "applies": {"used": usage.applies, "limit": cfg.max_applies_per_day},
+    }
