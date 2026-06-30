@@ -24,6 +24,9 @@ scraping = [
     "playwright>=1.44",
     "playwright-stealth>=1.0.6",
 ]
+executor = [
+    "playwright>=1.44",
+]
 automation = [
     "apscheduler>=3.11",
 ]

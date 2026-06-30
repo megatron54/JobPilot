@@ -341,3 +341,21 @@ export async function cancelPipeline(): Promise<void> {
 export async function getPipelineStatus(): Promise<PipelineStatusInfo> {
   return autopilotGet<PipelineStatusInfo>('/autopilot/status');
 }
+
+export interface ExecutionResult {
+  job_id: string;
+  kind: string;
+  status: string;
+  detail: string;
+  ats: string;
+}
+
+export async function executeApply(
+  jobId: string,
+  autoSubmit = false
+): Promise<ExecutionResult> {
+  return autopilotSend<ExecutionResult>('POST', '/autopilot/execute/apply', {
+    job_id: jobId,
+    auto_submit: autoSubmit,
+  });
+}
