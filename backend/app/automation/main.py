@@ -19,6 +19,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
 from .database import Database, set_db, get_db
+from .discovery import discover
+from .jobs_repository import JobsRepository
 from .models import (
     ApiResponse,
     AutopilotConfig,
@@ -153,6 +155,43 @@ async def put_config(config: AutopilotConfig) -> ApiResponse:
 async def pipeline_status() -> PipelineStatus:
     # Phase 3 will wire this to the real orchestrator state.
     return PipelineStatus(status="idle")
+
+
+# --- Discovery ----------------------------------------------------------
+
+
+@app.post("/autopilot/discover")
+async def run_discovery() -> dict:
+    """Run a discovery pass using the stored search criteria.
+
+    Requires an active LinkedIn session (cookies forwarded by the Tauri host).
+    """
+    if not session.has_session:
+        raise HTTPException(status_code=400, detail="No LinkedIn session. Log in first.")
+
+    criteria = store.load_search_criteria()
+    if not criteria.keywords:
+        raise HTTPException(status_code=400, detail="No search keywords configured.")
+
+    result = await discover(get_db(), session, criteria)
+    return {
+        "fetched": result.fetched,
+        "new": result.new,
+        "detailed": result.detailed,
+        "errors": result.errors,
+        "stopped_reason": result.stopped_reason,
+    }
+
+
+@app.get("/autopilot/jobs")
+async def list_jobs(limit: int = 50, scored_only: bool = False, min_score: float = 0.0) -> dict:
+    repo = JobsRepository(get_db())
+    if scored_only:
+        jobs = await repo.top_scored(limit=limit, min_score=min_score)
+    else:
+        jobs = await repo.list_recent(limit=limit)
+    total = await repo.count()
+    return {"jobs": jobs, "total": total}
 
 
 # --- Queue --------------------------------------------------------------

@@ -278,3 +278,41 @@ export async function saveAutopilotConfig(config: AutopilotConfig): Promise<void
 export async function getQueue(): Promise<{ actions: QueueAction[] }> {
   return autopilotGet<{ actions: QueueAction[] }>('/autopilot/queue');
 }
+
+export interface DiscoveredJobRow {
+  job_id: string;
+  title: string;
+  company: string;
+  location: string;
+  workplace_type: string;
+  apply_method: string;
+  external_url: string;
+  score: number | null;
+  recommendation: string;
+  recruiter_name: string;
+  recruiter_url: string;
+  status: string;
+  discovered_at?: string;
+}
+
+export interface DiscoveryResult {
+  fetched: number;
+  new: number;
+  detailed: number;
+  errors: number;
+  stopped_reason: string;
+}
+
+export async function autopilotDiscover(): Promise<DiscoveryResult> {
+  return autopilotSend<DiscoveryResult>('POST', '/autopilot/discover');
+}
+
+export async function getDiscoveredJobs(
+  limit = 50,
+  scoredOnly = false
+): Promise<{ jobs: DiscoveredJobRow[]; total: number }> {
+  const params = `?limit=${limit}&scored_only=${scoredOnly}`;
+  return autopilotGet<{ jobs: DiscoveredJobRow[]; total: number }>(
+    `/autopilot/jobs${params}`
+  );
+}
