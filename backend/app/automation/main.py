@@ -241,6 +241,59 @@ async def list_jobs(limit: int = 50, scored_only: bool = False, min_score: float
     return {"jobs": jobs, "total": total}
 
 
+# --- Execution (Phase 5: applications) ----------------------------------
+
+
+@app.post("/autopilot/execute/apply")
+async def execute_apply(payload: dict) -> dict:
+    """Execute an application for a discovered job in a visible browser.
+
+    By default does NOT auto-submit: the browser is left open for the user to
+    review and confirm. Requires an active LinkedIn session for Easy Apply.
+    """
+    job_id = str(payload.get("job_id", ""))
+    auto_submit = bool(payload.get("auto_submit", False))
+    if not job_id:
+        raise HTTPException(status_code=400, detail="job_id is required")
+
+    row = await get_db().fetch_one(
+        """
+        SELECT job_id, title, company, apply_method, external_url
+        FROM discovered_jobs WHERE job_id = ?
+        """,
+        (job_id,),
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if row["apply_method"] == "easy_apply" and not session.has_session:
+        raise HTTPException(status_code=400, detail="No LinkedIn session for Easy Apply")
+
+    from .cv_locator import find_cv_path, read_cv_text
+    from .executor import execute_application
+    from .profile import load_profile
+
+    result = await execute_application(
+        session=session,
+        profile=load_profile(),
+        job_id=job_id,
+        apply_method=row["apply_method"] or "external",
+        external_url=row["external_url"] or "",
+        cv_path=find_cv_path(),
+        cv_text=read_cv_text(),
+        job_title=row["title"] or "",
+        company=row["company"] or "",
+        auto_submit=auto_submit,
+    )
+    return {
+        "job_id": result.job_id,
+        "kind": result.kind,
+        "status": result.status,
+        "detail": result.detail,
+        "ats": result.ats,
+    }
+
+
 # --- Queue --------------------------------------------------------------
 
 
