@@ -17,6 +17,23 @@ fn client() -> Result<reqwest::Client, String> {
         .map_err(|e| e.to_string())
 }
 
+/// Validate a proxy path to prevent SSRF / host-override via crafted paths.
+/// Only relative paths under known autopilot prefixes are allowed.
+fn validate_path(path: &str) -> Result<(), String> {
+    if !path.starts_with('/') {
+        return Err("Path must start with '/'".to_string());
+    }
+    // Reject anything that could change the authority component of the URL.
+    if path.starts_with("//") || path.contains('@') || path.contains('\\') {
+        return Err("Invalid path".to_string());
+    }
+    const ALLOWED: [&str; 3] = ["/autopilot/", "/health", "/shutdown"];
+    if !ALLOWED.iter().any(|p| path == *p || path.starts_with(p)) {
+        return Err("Path not allowed".to_string());
+    }
+    Ok(())
+}
+
 /// Start the autopilot service and forward LinkedIn cookies.
 #[tauri::command]
 pub async fn autopilot_start(
@@ -104,6 +121,7 @@ pub async fn autopilot_get(
     service: State<'_, AutopilotService>,
     path: String,
 ) -> Result<Value, String> {
+    validate_path(&path)?;
     let base = service.base_url();
     let c = client()?;
     let resp = c
@@ -124,6 +142,7 @@ pub async fn autopilot_send(
     path: String,
     body: Option<Value>,
 ) -> Result<Value, String> {
+    validate_path(&path)?;
     let base = service.base_url();
     let c = client()?;
     let url = format!("{base}{path}");
@@ -145,4 +164,26 @@ pub async fn autopilot_send(
     resp.json::<Value>()
         .await
         .map_err(|e| format!("Invalid JSON from autopilot: {e}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_path;
+
+    #[test]
+    fn accepts_allowed_paths() {
+        assert!(validate_path("/health").is_ok());
+        assert!(validate_path("/autopilot/queue").is_ok());
+        assert!(validate_path("/autopilot/settings/criteria").is_ok());
+    }
+
+    #[test]
+    fn rejects_ssrf_and_unknown_paths() {
+        assert!(validate_path("//evil.com/").is_err());
+        assert!(validate_path("/autopilot/@evil.com").is_err());
+        assert!(validate_path("http://evil.com").is_err());
+        assert!(validate_path("/secrets").is_err());
+        assert!(validate_path("autopilot/queue").is_err());
+        assert!(validate_path("/autopilot\\x").is_err());
+    }
 }

@@ -57,11 +57,14 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# The service is reached server-side from the Tauri (Rust) host, not directly
+# from a browser. CORS is therefore restricted to local origins and does not
+# combine credentials with a wildcard (which is invalid and unsafe).
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
+    allow_origin_regex=r"^(https?://(localhost|127\.0\.0\.1)(:\d+)?|tauri://localhost)$",
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["*"],
 )
 

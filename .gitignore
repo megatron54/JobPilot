@@ -37,6 +37,7 @@ data/autopilot.db-wal
 data/autopilot.db-shm
 data/search_criteria.json
 data/autopilot_config.json
+data/autopilot.log
 
 # OS
 .DS_Store

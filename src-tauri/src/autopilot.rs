@@ -55,6 +55,15 @@ impl AutopilotService {
         let port = pick_port(*self.port.lock().unwrap());
         *self.port.lock().unwrap() = port;
 
+        // Redirect child output to a log file for debugging startup issues.
+        let (stdout_cfg, stderr_cfg) = match open_log_file(data_dir) {
+            Some(file) => {
+                let err = file.try_clone().map(Stdio::from).unwrap_or_else(|_| Stdio::null());
+                (Stdio::from(file), err)
+            }
+            None => (Stdio::null(), Stdio::null()),
+        };
+
         let child = Command::new(&python)
             .args([
                 "-m",
@@ -71,8 +80,8 @@ impl AutopilotService {
             .env("AUTOPILOT_DATA_DIR", data_dir)
             .env("AUTOPILOT_PORT", port.to_string())
             .env("AUTOPILOT_LLM_BASE_URL", ollama_url)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stdout(stdout_cfg)
+            .stderr(stderr_cfg)
             .spawn()
             .map_err(|e| format!("Failed to spawn autopilot service: {e}"))?;
 
@@ -102,6 +111,14 @@ impl AutopilotService {
         tokio::time::sleep(Duration::from_millis(600)).await;
         self.stop();
     }
+}
+
+/// Open (truncate) the autopilot log file in the data directory.
+/// Returns None if the file cannot be created (logging is best-effort).
+fn open_log_file(data_dir: &str) -> Option<std::fs::File> {
+    let dir = PathBuf::from(data_dir);
+    let _ = std::fs::create_dir_all(&dir);
+    std::fs::File::create(dir.join("autopilot.log")).ok()
 }
 
 /// Locate the Python interpreter and the backend directory.
