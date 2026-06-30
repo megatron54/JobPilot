@@ -8,6 +8,13 @@ use aes_gcm::{Aes256Gcm, KeyInit, Nonce};
 use base64::Engine;
 use std::path::PathBuf;
 
+/// A bundle of LinkedIn auth cookies needed for the Voyager API.
+#[derive(Default, Clone, serde::Serialize)]
+pub struct LinkedInCookies {
+    pub li_at: String,
+    pub jsessionid: String,
+}
+
 /// Get the LinkedIn `li_at` session cookie from Chrome or Edge.
 /// Tries Edge first (more common on Windows), then Chrome.
 pub fn get_linkedin_cookie() -> Result<String, String> {
@@ -19,6 +26,66 @@ pub fn get_linkedin_cookie() -> Result<String, String> {
         return Ok(cookie);
     }
     Err("Could not find LinkedIn session cookie. Make sure you are logged into LinkedIn in Chrome or Edge.".to_string())
+}
+
+/// Get both `li_at` and `JSESSIONID` cookies for the Voyager API.
+/// `JSESSIONID` is required to derive the csrf-token header.
+/// Tries Edge first, then Chrome. `li_at` is mandatory; `JSESSIONID` is best-effort.
+pub fn get_linkedin_cookies() -> Result<LinkedInCookies, String> {
+    for browser in [Browser::Edge, Browser::Chrome] {
+        if let Ok(cookies) = get_cookies_from_browser(browser) {
+            if !cookies.li_at.is_empty() {
+                return Ok(cookies);
+            }
+        }
+    }
+    Err("Could not find LinkedIn session cookies. Make sure you are logged into LinkedIn in Chrome or Edge.".to_string())
+}
+
+fn get_cookies_from_browser(browser: Browser) -> Result<LinkedInCookies, String> {
+    let (local_state_path, cookies_path) = get_browser_paths(&browser);
+
+    if !local_state_path.exists() {
+        return Err("Local State not found".to_string());
+    }
+    if !cookies_path.exists() {
+        return Err("Cookies database not found".to_string());
+    }
+
+    let master_key = get_master_key(&local_state_path)?;
+
+    let temp_dir = std::env::temp_dir();
+    let temp_cookies = temp_dir.join("jobpilot_cookies_multi_tmp");
+    std::fs::copy(&cookies_path, &temp_cookies)
+        .map_err(|e| format!("Failed to copy cookies DB (browser may be locking it): {e}"))?;
+
+    let li_at = query_cookie(&temp_cookies, &master_key, "li_at").unwrap_or_default();
+    let jsessionid = query_cookie(&temp_cookies, &master_key, "JSESSIONID").unwrap_or_default();
+
+    let _ = std::fs::remove_file(&temp_cookies);
+
+    Ok(LinkedInCookies { li_at, jsessionid })
+}
+
+/// Query and decrypt a single cookie value by name for any linkedin.com host.
+fn query_cookie(db_path: &PathBuf, master_key: &[u8], name: &str) -> Result<String, String> {
+    let conn = rusqlite::Connection::open_with_flags(
+        db_path,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )
+    .map_err(|e| format!("Failed to open cookies DB: {e}"))?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT encrypted_value FROM cookies WHERE host_key LIKE '%linkedin.com' AND name = ?1 LIMIT 1",
+        )
+        .map_err(|e| format!("Failed to prepare query: {e}"))?;
+
+    let encrypted_value: Vec<u8> = stmt
+        .query_row([name], |row| row.get(0))
+        .map_err(|_| format!("Cookie '{name}' not found"))?;
+
+    decrypt_cookie_value(&encrypted_value, master_key)
 }
 
 enum Browser {
