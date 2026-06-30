@@ -9,6 +9,8 @@ Run with:
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 import os
 import signal
@@ -16,6 +18,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from sse_starlette.sse import EventSourceResponse
 
 from .config import settings
 from .database import Database, set_db, get_db
@@ -30,6 +33,7 @@ from .models import (
     SessionCookies,
     SessionStatus,
 )
+from .pipeline import run_pipeline, state as pipeline_state, run_lock
 from .queue_manager import QueueManager
 from .session import session
 from . import store
@@ -153,8 +157,51 @@ async def put_config(config: AutopilotConfig) -> ApiResponse:
 
 @app.get("/autopilot/status", response_model=PipelineStatus)
 async def pipeline_status() -> PipelineStatus:
-    # Phase 3 will wire this to the real orchestrator state.
-    return PipelineStatus(status="idle")
+    return PipelineStatus(**pipeline_state.snapshot())
+
+
+@app.post("/autopilot/pipeline/run")
+async def pipeline_run() -> dict:
+    """Run the full pipeline (discover -> filter -> score) in the background."""
+    if not session.has_session:
+        raise HTTPException(status_code=400, detail="No LinkedIn session. Log in first.")
+    criteria = store.load_search_criteria()
+    if not criteria.keywords:
+        raise HTTPException(status_code=400, detail="No search keywords configured.")
+    if pipeline_state.is_running:
+        raise HTTPException(status_code=409, detail="A pipeline run is already in progress.")
+
+    async def _run() -> None:
+        async with run_lock:
+            await run_pipeline(get_db(), session, criteria, pipeline_state)
+
+    asyncio.create_task(_run())
+    return {"started": True, "status": pipeline_state.snapshot()}
+
+
+@app.post("/autopilot/pipeline/cancel", response_model=ApiResponse)
+async def pipeline_cancel() -> ApiResponse:
+    pipeline_state.request_cancel()
+    return ApiResponse(success=True, message="Cancellation requested")
+
+
+@app.get("/autopilot/pipeline/events")
+async def pipeline_events() -> EventSourceResponse:
+    """Server-Sent Events stream of pipeline progress."""
+
+    async def event_generator():
+        last = None
+        # Stream until the run completes, then send a final event.
+        while True:
+            snap = pipeline_state.snapshot()
+            if snap != last:
+                yield {"event": "progress", "data": json.dumps(snap)}
+                last = snap
+            if snap["status"] in ("completed", "failed", "cancelled", "idle"):
+                break
+            await asyncio.sleep(0.5)
+
+    return EventSourceResponse(event_generator())
 
 
 # --- Discovery ----------------------------------------------------------
