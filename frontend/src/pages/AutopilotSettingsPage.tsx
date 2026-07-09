@@ -257,6 +257,23 @@ export default function AutopilotSettingsPage() {
             />
 
             <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Discovery source</label>
+              <select
+                value={config.discovery_source}
+                onChange={e => setConfig({ ...config, discovery_source: e.target.value as AutopilotConfig['discovery_source'] })}
+                className="w-full bg-navy-700 border border-navy-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
+              >
+                <option value="guest">Guest — no login, safest (recommended)</option>
+                <option value="hybrid">Hybrid — guest search + LinkedIn enrich (needs login)</option>
+                <option value="voyager">Voyager — full LinkedIn API (needs login, higher risk)</option>
+              </select>
+              <p className="text-xs text-gray-500 mt-1.5">
+                Guest uses LinkedIn's public endpoints (no cookies, minimal ban risk). Voyager/Hybrid
+                use your logged-in session for richer data (Easy Apply, recruiters) but carry more risk.
+              </p>
+            </div>
+
+            <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">Daily schedule</label>
               <div className="flex items-end gap-3">
                 <NumberField

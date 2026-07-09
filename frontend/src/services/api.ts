@@ -204,6 +204,7 @@ export interface SearchCriteria {
 
 export interface AutopilotConfig {
   enabled: boolean;
+  discovery_source: 'guest' | 'voyager' | 'hybrid';
   schedule_hour: number;
   schedule_minute: number;
   schedule_days: number[];
