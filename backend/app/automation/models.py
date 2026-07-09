@@ -46,6 +46,7 @@ class SearchCriteria(BaseModel):
 
 class AutopilotConfig(BaseModel):
     enabled: bool = False
+    discovery_source: Literal["guest", "voyager", "hybrid"] = "guest"
     schedule_hour: int = 9
     schedule_minute: int = 0
     schedule_days: list[int] = Field(default_factory=lambda: [0, 1, 2, 3, 4])  # Mon-Fri

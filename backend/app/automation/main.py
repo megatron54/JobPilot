@@ -163,11 +163,14 @@ async def pipeline_status() -> PipelineStatus:
 @app.post("/autopilot/pipeline/run")
 async def pipeline_run() -> dict:
     """Run the full pipeline (discover -> filter -> score) in the background."""
-    if not session.has_session:
-        raise HTTPException(status_code=400, detail="No LinkedIn session. Log in first.")
     criteria = store.load_search_criteria()
     if not criteria.keywords:
         raise HTTPException(status_code=400, detail="No search keywords configured.")
+    if store.load_config().discovery_source in ("voyager", "hybrid") and not session.has_session:
+        raise HTTPException(
+            status_code=400,
+            detail="Voyager/hybrid discovery needs a LinkedIn session, or switch to 'guest'.",
+        )
     if pipeline_state.is_running:
         raise HTTPException(status_code=409, detail="A pipeline run is already in progress.")
 
@@ -211,22 +214,29 @@ async def pipeline_events() -> EventSourceResponse:
 async def run_discovery() -> dict:
     """Run a discovery pass using the stored search criteria.
 
-    Requires an active LinkedIn session (cookies forwarded by the Tauri host).
+    Guest mode (default) needs no LinkedIn session. Voyager/hybrid modes require
+    the cookies forwarded by the Tauri host.
     """
-    if not session.has_session:
-        raise HTTPException(status_code=400, detail="No LinkedIn session. Log in first.")
-
     criteria = store.load_search_criteria()
     if not criteria.keywords:
         raise HTTPException(status_code=400, detail="No search keywords configured.")
 
-    result = await discover(get_db(), session, criteria)
+    source = store.load_config().discovery_source
+    if source in ("voyager", "hybrid") and not session.has_session:
+        raise HTTPException(
+            status_code=400,
+            detail="Voyager/hybrid discovery needs a LinkedIn session. Log in first "
+                   "or switch discovery source to 'guest'.",
+        )
+
+    result = await discover(get_db(), session, criteria, source=source)
     return {
         "fetched": result.fetched,
         "new": result.new,
         "detailed": result.detailed,
         "errors": result.errors,
         "stopped_reason": result.stopped_reason,
+        "source_used": result.source_used,
     }
 
 

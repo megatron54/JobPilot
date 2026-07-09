@@ -33,6 +33,9 @@ class AutopilotSettings(BaseSettings):
     score_threshold: int = 60           # only queue jobs scoring >= this
     top_n_generate: int = 10            # generate content for top N jobs
 
+    # Discovery source: "guest" (no auth, safest) | "voyager" (auth) | "hybrid"
+    discovery_source: str = "guest"
+
     # Daily action limits (safety against LinkedIn detection)
     max_connections_per_day: int = 15
     max_messages_per_day: int = 30
