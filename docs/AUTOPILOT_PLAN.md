@@ -1474,6 +1474,22 @@ El MVP entrega: **el usuario configura criterios → el sistema busca y puntúa 
 - **Estado FINAL**: el sistema completo funciona end-to-end: discovery → matching → generación → cola de revisión → ejecución supervisada (apply/connect/message) con confirmación del usuario y límites de seguridad.
 - **Pendiente para producción**: testing real con cuenta fake (POC), instalación de browsers Playwright (`playwright install chromium`), scheduler diario (APScheduler), ajuste de selectores LinkedIn según cambios de UI.
 
+### 2026-06-30 — Integración de ai-job-search (Release v0.4.0)
+Análisis e integración del repo `github.com/MadsLorentzen/ai-job-search` (MIT). Es un workflow basado en Claude Code (slash-commands + skills markdown + LaTeX), paradigma distinto al nuestro, pero con técnicas muy valiosas. Adoptadas 4:
+
+- **#1 Guest discovery** (`feature/guest-discovery`, PR #7): endpoints `jobs-guest` de LinkedIn SIN autenticación (portado de TS a Python). **De-risquea el ban** — es la fuente por defecto ahora. Voyager solo enriquece el top-N. Fallback automático a guest si Voyager falla. Verificado en vivo (10 ofertas reales sin cookie).
+- **#2 Framework de evaluación 5-dim** (`feature/scoring-framework`, PR #8): scorer con 5 dimensiones ponderadas (technical 30%, experience 25%, behavioral 15%, career 30%) + location pass/fail veto. Overall determinista en Python.
+- **#3 ATS keyword coverage** (PR #8): extracción de keywords de la oferta (LLM) + matching determinista word-boundary vs perfil/CV. Endpoint `GET /autopilot/jobs/{id}/ats`. Cartas enfatizan keywords cubiertas reales.
+- **#4 Writing style + drafter-reviewer** (`feature/content-quality`, PR #9): reglas de estilo estrictas (sin em-dashes, sin clichés, forward-looking) + patrón drafter-reviewer (draft→crítica→revisión con 2 llamadas Ollama).
+
+**Fuente por defecto de discovery**: `guest` (elección del usuario, mínimo riesgo de ban). Configurable en Settings (guest/voyager/hybrid).
+
+**Atribución**: técnicas y código de `github.com/MadsLorentzen/ai-job-search` bajo licencia MIT. Ver `docs/ATTRIBUTION.md`.
+
+**Estado**: 115 tests backend pasando. Release v0.4.0.
+
+**No adoptado** (incompatible con nuestro stack Tauri+Python+Ollama): arquitectura de slash-commands Claude Code, toolchain LaTeX (lualatex/xelatex para CVs), portales daneses, agentes Claude spawneados. La generación de CV en LaTeX con verificación de PDF queda como posible trabajo futuro si se añade un toolchain LaTeX.
+
 ---
 
 *Fin del documento. Mantener actualizado conforme avance la implementación.*
