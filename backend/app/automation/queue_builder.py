@@ -52,7 +52,7 @@ async def build_queue_for_top_jobs(
             ]
             cover = await generate_cover_letter(
                 profile, job.get("title", ""), job.get("company", ""),
-                description, emphasize_keywords=emphasize,
+                description, emphasize_keywords=emphasize, refine=True,
             )
             await qm.add(job_id, apply_type, content_draft=cover,
                          priority=int(job.get("score", 0)))
