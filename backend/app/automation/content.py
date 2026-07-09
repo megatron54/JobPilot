@@ -21,19 +21,27 @@ async def generate_cover_letter(
     company: str,
     description: str = "",
     cv_text: str = "",
+    emphasize_keywords: list[str] | None = None,
 ) -> str:
     lang = _LANG_NAME.get(profile.preferred_language, "Spanish")
     system = (
         f"You are an expert career writer. Write a concise, compelling cover letter in {lang}. "
         f"Tone: {profile.tone}. 3 short paragraphs. No placeholders, no '[brackets]'. "
-        "Ground every claim in the candidate's real experience."
+        "Ground every claim in the candidate's real experience. Never fabricate skills."
     )
+    kw_line = ""
+    if emphasize_keywords:
+        kw_line = (
+            "\nNaturally emphasize these skills the candidate genuinely has and the role "
+            f"values: {', '.join(emphasize_keywords[:8])}. Do not force keywords the "
+            "candidate lacks."
+        )
     prompt = (
         f"CANDIDATE: {profile.name}, {profile.title}, {profile.years_experience:.0f} years.\n"
         f"SKILLS: {', '.join(profile.key_skills)}\n"
         f"CV: {cv_text[:1500]}\n\n"
         f"JOB: {job_title} at {company}\n"
-        f"DESCRIPTION: {description[:1200]}\n\n"
+        f"DESCRIPTION: {description[:1200]}{kw_line}\n\n"
         "Write the cover letter now."
     )
     try:
