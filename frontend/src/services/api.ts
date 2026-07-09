@@ -204,6 +204,7 @@ export interface SearchCriteria {
 
 export interface AutopilotConfig {
   enabled: boolean;
+  discovery_source: 'guest' | 'voyager' | 'hybrid';
   schedule_hour: number;
   schedule_minute: number;
   schedule_days: number[];
@@ -315,6 +316,17 @@ export async function getDiscoveredJobs(
   return autopilotGet<{ jobs: DiscoveredJobRow[]; total: number }>(
     `/autopilot/jobs${params}`
   );
+}
+
+export interface AtsCoverage {
+  covered: string[];
+  missing: string[];
+  total: number;
+  ratio: number;
+}
+
+export async function getJobAts(jobId: string): Promise<AtsCoverage> {
+  return autopilotGet<AtsCoverage>(`/autopilot/jobs/${jobId}/ats`);
 }
 
 export interface PipelineStatusInfo {

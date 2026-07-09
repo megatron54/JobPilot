@@ -58,8 +58,11 @@ async def run_pipeline(
             async def on_progress(stage: str, done: int, total: int) -> None:
                 state.update(stage, done, total)
 
+            from .. import store
+
             disc = await discover(
-                db, session, criteria, enrich=True, progress=on_progress
+                db, session, criteria, enrich=True, progress=on_progress,
+                source=store.load_config().discovery_source,
             )
             result.fetched = disc.fetched
             result.new = disc.new

@@ -163,11 +163,14 @@ async def pipeline_status() -> PipelineStatus:
 @app.post("/autopilot/pipeline/run")
 async def pipeline_run() -> dict:
     """Run the full pipeline (discover -> filter -> score) in the background."""
-    if not session.has_session:
-        raise HTTPException(status_code=400, detail="No LinkedIn session. Log in first.")
     criteria = store.load_search_criteria()
     if not criteria.keywords:
         raise HTTPException(status_code=400, detail="No search keywords configured.")
+    if store.load_config().discovery_source in ("voyager", "hybrid") and not session.has_session:
+        raise HTTPException(
+            status_code=400,
+            detail="Voyager/hybrid discovery needs a LinkedIn session, or switch to 'guest'.",
+        )
     if pipeline_state.is_running:
         raise HTTPException(status_code=409, detail="A pipeline run is already in progress.")
 
@@ -211,22 +214,29 @@ async def pipeline_events() -> EventSourceResponse:
 async def run_discovery() -> dict:
     """Run a discovery pass using the stored search criteria.
 
-    Requires an active LinkedIn session (cookies forwarded by the Tauri host).
+    Guest mode (default) needs no LinkedIn session. Voyager/hybrid modes require
+    the cookies forwarded by the Tauri host.
     """
-    if not session.has_session:
-        raise HTTPException(status_code=400, detail="No LinkedIn session. Log in first.")
-
     criteria = store.load_search_criteria()
     if not criteria.keywords:
         raise HTTPException(status_code=400, detail="No search keywords configured.")
 
-    result = await discover(get_db(), session, criteria)
+    source = store.load_config().discovery_source
+    if source in ("voyager", "hybrid") and not session.has_session:
+        raise HTTPException(
+            status_code=400,
+            detail="Voyager/hybrid discovery needs a LinkedIn session. Log in first "
+                   "or switch discovery source to 'guest'.",
+        )
+
+    result = await discover(get_db(), session, criteria, source=source)
     return {
         "fetched": result.fetched,
         "new": result.new,
         "detailed": result.detailed,
         "errors": result.errors,
         "stopped_reason": result.stopped_reason,
+        "source_used": result.source_used,
     }
 
 
@@ -239,6 +249,30 @@ async def list_jobs(limit: int = 50, scored_only: bool = False, min_score: float
         jobs = await repo.list_recent(limit=limit)
     total = await repo.count()
     return {"jobs": jobs, "total": total}
+
+
+@app.get("/autopilot/jobs/{job_id}/ats")
+async def job_ats(job_id: str) -> dict:
+    """On-demand ATS keyword coverage for a job vs the user's profile + CV."""
+    row = await get_db().fetch_one(
+        "SELECT title, description FROM discovered_jobs WHERE job_id = ?", (job_id,)
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    from .cv_locator import read_cv_text
+    from .pipeline.ats import analyze_ats
+    from .profile import load_profile
+
+    coverage = await analyze_ats(
+        row["title"] or "", row["description"] or "", load_profile(), read_cv_text()
+    )
+    return {
+        "covered": coverage.covered,
+        "missing": coverage.missing,
+        "total": coverage.total,
+        "ratio": round(coverage.ratio, 2),
+    }
 
 
 # --- Execution (Phase 5: applications) ----------------------------------

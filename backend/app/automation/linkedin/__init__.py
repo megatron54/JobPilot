@@ -8,6 +8,13 @@ from .client import (
     SessionExpiredError,
 )
 from .details import JobDetails, fetch_job_details
+from .guest import (
+    GuestFetchError,
+    GuestJobCard,
+    GuestJobDetail,
+    fetch_guest_detail,
+    search_guest,
+)
 from .people import Recruiter, find_recruiters
 from .rate_limiter import RateLimiter
 from .search import JobStub, search_jobs
@@ -25,4 +32,9 @@ __all__ = [
     "fetch_job_details",
     "Recruiter",
     "find_recruiters",
+    "GuestJobCard",
+    "GuestJobDetail",
+    "GuestFetchError",
+    "search_guest",
+    "fetch_guest_detail",
 ]
