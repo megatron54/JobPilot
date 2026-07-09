@@ -318,6 +318,17 @@ export async function getDiscoveredJobs(
   );
 }
 
+export interface AtsCoverage {
+  covered: string[];
+  missing: string[];
+  total: number;
+  ratio: number;
+}
+
+export async function getJobAts(jobId: string): Promise<AtsCoverage> {
+  return autopilotGet<AtsCoverage>(`/autopilot/jobs/${jobId}/ats`);
+}
+
 export interface PipelineStatusInfo {
   run_id: string | null;
   status: 'idle' | 'running' | 'completed' | 'failed' | 'cancelled';

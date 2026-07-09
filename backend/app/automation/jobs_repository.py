@@ -133,7 +133,7 @@ class JobsRepository:
         rows = await self._db.fetch_all(
             """
             SELECT job_id, title, company, location, workplace_type, apply_method,
-                   external_url, score, recommendation, score_reasons,
+                   external_url, description, score, recommendation, score_reasons,
                    deal_breakers, missing_skills, recruiter_name, recruiter_url
             FROM discovered_jobs
             WHERE score IS NOT NULL AND score >= ?

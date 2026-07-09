@@ -251,6 +251,30 @@ async def list_jobs(limit: int = 50, scored_only: bool = False, min_score: float
     return {"jobs": jobs, "total": total}
 
 
+@app.get("/autopilot/jobs/{job_id}/ats")
+async def job_ats(job_id: str) -> dict:
+    """On-demand ATS keyword coverage for a job vs the user's profile + CV."""
+    row = await get_db().fetch_one(
+        "SELECT title, description FROM discovered_jobs WHERE job_id = ?", (job_id,)
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    from .cv_locator import read_cv_text
+    from .pipeline.ats import analyze_ats
+    from .profile import load_profile
+
+    coverage = await analyze_ats(
+        row["title"] or "", row["description"] or "", load_profile(), read_cv_text()
+    )
+    return {
+        "covered": coverage.covered,
+        "missing": coverage.missing,
+        "total": coverage.total,
+        "ratio": round(coverage.ratio, 2),
+    }
+
+
 # --- Execution (Phase 5: applications) ----------------------------------
 
 

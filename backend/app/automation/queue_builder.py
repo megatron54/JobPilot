@@ -44,9 +44,15 @@ async def build_queue_for_top_jobs(
             apply_type = (
                 "apply_easy" if job.get("apply_method") == "easy_apply" else "apply_external"
             )
+            description = job.get("description") or ""
+            # Emphasize the candidate's own skills that the posting mentions.
+            emphasize = [
+                s for s in profile.key_skills
+                if s and s.lower() in description.lower()
+            ]
             cover = await generate_cover_letter(
                 profile, job.get("title", ""), job.get("company", ""),
-                job.get("description", "") if "description" in job else "",
+                description, emphasize_keywords=emphasize,
             )
             await qm.add(job_id, apply_type, content_draft=cover,
                          priority=int(job.get("score", 0)))

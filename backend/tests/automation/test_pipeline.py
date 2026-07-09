@@ -20,8 +20,11 @@ pytestmark = pytest.mark.asyncio
 async def test_score_job_parses_llm_output(monkeypatch) -> None:
     async def fake_json(**kwargs):
         return {
-            "score": 87,
-            "recommendation": "strong_match",
+            "technical": 90,
+            "experience": 85,
+            "behavioral": 80,
+            "career": 88,
+            "location_pass": True,
             "match_reasons": ["React match", "Remote"],
             "deal_breakers": [],
             "missing_skills": ["GraphQL"],
@@ -31,9 +34,11 @@ async def test_score_job_parses_llm_output(monkeypatch) -> None:
     result = await scorer.score_job(
         {"job_id": "1", "title": "React Dev"}, UserProfile(key_skills=["React"])
     )
-    assert result.score == 87.0
+    # weighted: 0.30*90 + 0.25*85 + 0.15*80 + 0.30*88 = 27+21.25+12+26.4 = 86.65
+    assert result.score == 86.7
     assert result.recommendation == "strong_match"
     assert "GraphQL" in result.missing_skills
+    assert result.dimensions["technical"] == 90
 
 
 async def test_score_job_handles_llm_error(monkeypatch) -> None:
@@ -46,13 +51,31 @@ async def test_score_job_handles_llm_error(monkeypatch) -> None:
     assert result.recommendation == "skip"
 
 
-async def test_score_clamps_out_of_range(monkeypatch) -> None:
+async def test_location_veto_caps_score(monkeypatch) -> None:
     async def fake_json(**kwargs):
-        return {"score": 150, "recommendation": "strong_match"}
+        return {
+            "technical": 95, "experience": 95, "behavioral": 95, "career": 95,
+            "location_pass": False,
+        }
 
     monkeypatch.setattr(scorer.llm, "generate_json", fake_json)
     result = await scorer.score_job({"job_id": "1"}, UserProfile())
-    assert result.score == 100.0
+    assert result.score <= 39.0
+    assert result.recommendation == "skip"
+
+
+def test_compute_overall_weighting() -> None:
+    dims = {"technical": 100, "experience": 100, "behavioral": 100, "career": 100}
+    assert scorer.compute_overall(dims, True) == 100.0
+    assert scorer.compute_overall({"technical": 0, "experience": 0, "behavioral": 0, "career": 0}, True) == 0.0
+
+
+def test_recommendation_buckets() -> None:
+    assert scorer.recommendation_for(80, True) == "strong_match"
+    assert scorer.recommendation_for(65, True) == "good"
+    assert scorer.recommendation_for(50, True) == "partial"
+    assert scorer.recommendation_for(30, True) == "skip"
+    assert scorer.recommendation_for(90, False) == "skip"
 
 
 async def test_pipeline_filters_and_scores(db: Database, monkeypatch) -> None:
