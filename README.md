@@ -1,6 +1,15 @@
 # JobPilot
 
-Desktop AI-powered job application assistant that uses local LLMs (via Ollama) to generate personalized cover letters, recruiter messages, and interview preparation content. Built with Tauri (Rust) + React.
+![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
+![Ollama](https://img.shields.io/badge/Ollama-local%20LLM-000000?logo=ollama&logoColor=white)
+![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
+![Tauri](https://img.shields.io/badge/Tauri-2-FFC131?logo=tauri&logoColor=black)
+![Rust](https://img.shields.io/badge/Rust-000000?logo=rust&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
+![License](https://img.shields.io/badge/license-MIT--adapted-lightgrey)
+
+Desktop AI-powered job application assistant that uses local LLMs (via Ollama) to generate personalized cover letters, recruiter messages, and interview preparation content. Built with Tauri (Rust) + React, with an alternative Python/FastAPI backend for Docker deployments.
 
 ## Features
 
@@ -186,3 +195,10 @@ playwright install chromium
 ## Based on
 
 Architecture inspired by [DocuMind](https://github.com/miguelglez8/DocuMind) - same Ollama integration pattern, no LangChain, pure httpx calls.
+
+See also [docs/ATTRIBUTION.md](docs/ATTRIBUTION.md) for automation/scoring components adapted from [ai-job-search](https://github.com/MadsLorentzen/ai-job-search) (MIT licensed).
+
+## Autor
+
+**Miguel Serra Ferrando** — Telecommunications Engineer
+[GitHub](https://github.com/megatron54) · [LinkedIn](https://www.linkedin.com/in/miguel-serra-ferrando) · [Email](mailto:miguel.serra.ferrando@gmail.com)
