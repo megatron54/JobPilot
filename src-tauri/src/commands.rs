@@ -7,9 +7,31 @@ use crate::state::{AppState, JobOffer, Profile};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, State};
+
+/// Language name + accent/diacritic hint injected into generation prompts,
+/// shared by the cover letter, recruiter message, and interview answer
+/// commands (previously duplicated verbatim in all three).
+fn language_prompt_hint(language: &str) -> &'static str {
+    match language {
+        "es" => "Spanish (use proper accents: á, é, í, ó, ú, ñ, ü)",
+        "fr" => "French (use proper accents: é, è, ê, ë, à, ç, ô, î, ù)",
+        "de" => "German (use proper umlauts: ä, ö, ü, ß)",
+        "pt" => "Portuguese (use proper accents: ã, õ, á, é, ç, â, ê)",
+        _ => "English",
+    }
+}
+
+/// Persist the profile to `<data_dir>/profile.json`, shared by
+/// `save_profile` and the three `extract_profile_from_*` auto-save paths
+/// (previously each reimplemented this identically).
+fn write_profile_to_disk(data_dir: &Path, profile: &Profile) -> Result<(), String> {
+    let path = data_dir.join("profile.json");
+    let json = serde_json::to_string_pretty(profile).map_err(|e| e.to_string())?;
+    fs::write(&path, &json).map_err(|e| format!("Failed to save profile: {e}"))
+}
 
 // ─── Data structures ───────────────────────────────────────────────────────────
 
@@ -157,9 +179,7 @@ pub async fn save_profile(state: State<'_, AppState>, profile: Profile) -> Resul
     let data_dir = state.data_dir.read().await.clone();
 
     // Save to disk
-    let path = data_dir.join("profile.json");
-    let json = serde_json::to_string_pretty(&profile).map_err(|e| e.to_string())?;
-    fs::write(&path, &json).map_err(|e| format!("Failed to save profile: {e}"))?;
+    write_profile_to_disk(&data_dir, &profile)?;
 
     // Update state
     let mut p = state.profile.write().await;
@@ -358,9 +378,7 @@ CRITICAL: Return ONLY the JSON object. No markdown, no explanation."#,
 
     // Auto-save the extracted profile
     let data_dir = state.data_dir.read().await.clone();
-    let path = data_dir.join("profile.json");
-    let json = serde_json::to_string_pretty(&profile).map_err(|e| e.to_string())?;
-    fs::write(&path, &json).map_err(|e| format!("Failed to save profile: {e}"))?;
+    write_profile_to_disk(&data_dir, &profile)?;
 
     // Update state
     *state.profile.write().await = profile.clone();
@@ -458,9 +476,7 @@ CRITICAL: Return ONLY the JSON. No explanation."#,
 
     // Auto-save
     let data_dir = state.data_dir.read().await.clone();
-    let path = data_dir.join("profile.json");
-    let json = serde_json::to_string_pretty(&profile).map_err(|e| e.to_string())?;
-    fs::write(&path, &json).map_err(|e| format!("Failed to save profile: {e}"))?;
+    write_profile_to_disk(&data_dir, &profile)?;
 
     *state.profile.write().await = profile.clone();
 
@@ -576,9 +592,7 @@ CRITICAL: Return ONLY the JSON. No explanation."#,
 
     // Auto-save
     let data_dir = state.data_dir.read().await.clone();
-    let path = data_dir.join("profile.json");
-    let json = serde_json::to_string_pretty(&profile).map_err(|e| e.to_string())?;
-    fs::write(&path, &json).map_err(|e| format!("Failed to save profile: {e}"))?;
+    write_profile_to_disk(&data_dir, &profile)?;
 
     *state.profile.write().await = profile.clone();
 
@@ -703,13 +717,7 @@ pub async fn generate_cover_letter(
     let job = get_job_data(&state, &request.job_id).await?;
     let profile = state.profile.read().await.clone();
 
-    let lang = match request.language.as_str() {
-        "es" => "Spanish (use proper accents: á, é, í, ó, ú, ñ, ü)",
-        "fr" => "French (use proper accents: é, è, ê, ë, à, ç, ô, î, ù)",
-        "de" => "German (use proper umlauts: ä, ö, ü, ß)",
-        "pt" => "Portuguese (use proper accents: ã, õ, á, é, ç, â, ê)",
-        _ => "English",
-    };
+    let lang = language_prompt_hint(request.language.as_str());
     let recruiter = request.recruiter_name.unwrap_or_default();
 
     let system = format!(
@@ -770,13 +778,7 @@ pub async fn generate_recruiter_message(
     let job = get_job_data(&state, &request.job_id).await?;
     let profile = state.profile.read().await.clone();
 
-    let lang = match request.language.as_str() {
-        "es" => "Spanish (use proper accents: á, é, í, ó, ú, ñ, ü)",
-        "fr" => "French (use proper accents: é, è, ê, ë, à, ç, ô, î, ù)",
-        "de" => "German (use proper umlauts: ä, ö, ü, ß)",
-        "pt" => "Portuguese (use proper accents: ã, õ, á, é, ç, â, ê)",
-        _ => "English",
-    };
+    let lang = language_prompt_hint(request.language.as_str());
     let recruiter = request.recruiter_name.unwrap_or_default();
 
     let system = format!(
@@ -832,13 +834,7 @@ pub async fn generate_interview_answer(
     let job = get_job_data(&state, &request.job_id).await?;
     let profile = state.profile.read().await.clone();
 
-    let lang = match request.language.as_str() {
-        "es" => "Spanish (use proper accents: á, é, í, ó, ú, ñ, ü)",
-        "fr" => "French (use proper accents: é, è, ê, ë, à, ç, ô, î, ù)",
-        "de" => "German (use proper umlauts: ä, ö, ü, ß)",
-        "pt" => "Portuguese (use proper accents: ã, õ, á, é, ç, â, ê)",
-        _ => "English",
-    };
+    let lang = language_prompt_hint(request.language.as_str());
 
     let system = format!(
         "You are an expert interview coach.\n\
@@ -1007,6 +1003,11 @@ fn chrono_now() -> String {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
-    // Simple ISO-ish format without chrono crate
-    format!("{}", secs)
+    // Zero-padded epoch seconds (not full ISO-8601, to avoid a chrono crate
+    // dependency) so that lexicographic comparisons - used to sort jobs by
+    // `created_at` in `list_jobs` - stay correct once the unpadded decimal
+    // representation crosses a digit-count boundary (e.g. 10 -> 11 digits,
+    // which would otherwise sort a later 11-digit timestamp *before* an
+    // earlier 10-digit one).
+    format!("{secs:020}")
 }
