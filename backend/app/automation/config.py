@@ -19,6 +19,12 @@ class AutopilotSettings(BaseSettings):
     host: str = "127.0.0.1"
     port: int = 8765
 
+    # Shared secret required on every request (except /health) via the
+    # `X-Autopilot-Token` header. Generated and passed by the Tauri host at
+    # spawn time so that no other local process/user can control the
+    # automation service (session cookies, LinkedIn actions, shutdown).
+    auth_token: str = ""
+
     # Data directory (passed by Tauri host; defaults to local ./data)
     data_dir: str = "./data"
 

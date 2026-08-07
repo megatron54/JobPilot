@@ -50,7 +50,7 @@ pub async fn autopilot_start(
 
     // Best-effort: extract and forward cookies (non-fatal if not logged in).
     let cookie_status = match linkedin::get_linkedin_cookies() {
-        Ok(c) => match autopilot::send_cookies(&base, &c.li_at, &c.jsessionid).await {
+        Ok(c) => match autopilot::send_cookies(&base, &service.token(), &c.li_at, &c.jsessionid).await {
             Ok(_) => "sent",
             Err(_) => "send_failed",
         },
@@ -85,7 +85,12 @@ pub async fn autopilot_status(service: State<'_, AutopilotService>) -> Result<Va
     let mut session = serde_json::json!({ "has_session": false });
     if healthy {
         if let Ok(c) = client() {
-            if let Ok(resp) = c.get(format!("{base}/autopilot/session")).send().await {
+            if let Ok(resp) = c
+                .get(format!("{base}/autopilot/session"))
+                .header("X-Autopilot-Token", service.token())
+                .send()
+                .await
+            {
                 if let Ok(json) = resp.json::<Value>().await {
                     session = json;
                 }
@@ -108,7 +113,7 @@ pub async fn autopilot_refresh_cookies(
 ) -> Result<Value, String> {
     let base = service.base_url();
     let cookies = linkedin::get_linkedin_cookies()?;
-    autopilot::send_cookies(&base, &cookies.li_at, &cookies.jsessionid).await?;
+    autopilot::send_cookies(&base, &service.token(), &cookies.li_at, &cookies.jsessionid).await?;
     Ok(serde_json::json!({
         "li_at_present": !cookies.li_at.is_empty(),
         "jsessionid_present": !cookies.jsessionid.is_empty(),
@@ -126,6 +131,7 @@ pub async fn autopilot_get(
     let c = client()?;
     let resp = c
         .get(format!("{base}{path}"))
+        .header("X-Autopilot-Token", service.token())
         .send()
         .await
         .map_err(|e| format!("Autopilot request failed: {e}"))?;
@@ -154,6 +160,7 @@ pub async fn autopilot_send(
         "DELETE" => c.delete(&url),
         _ => return Err(format!("Unsupported method: {method}")),
     };
+    let req = req.header("X-Autopilot-Token", service.token());
 
     let req = if let Some(b) = body { req.json(&b) } else { req };
 

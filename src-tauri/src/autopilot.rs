@@ -20,6 +20,12 @@ pub const DEFAULT_PORT: u16 = 8765;
 pub struct AutopilotService {
     child: Mutex<Option<Child>>,
     port: Mutex<u16>,
+    /// Shared secret required by the Python service on every request
+    /// (via the `X-Autopilot-Token` header) except `/health`. Generated
+    /// once per app run and passed to the child via an environment
+    /// variable, so no other local process can control the automation
+    /// service (session cookies, LinkedIn actions, shutdown).
+    token: Mutex<String>,
 }
 
 impl Default for AutopilotService {
@@ -27,8 +33,40 @@ impl Default for AutopilotService {
         Self {
             child: Mutex::new(None),
             port: Mutex::new(DEFAULT_PORT),
+            token: Mutex::new(generate_token()),
         }
     }
+}
+
+/// Generate a random-looking hex token without pulling in a `rand` crate
+/// dependency. Mixes high-resolution time, the process id, and a stack
+/// address (ASLR) through SplitMix64. This is a local-only shared secret
+/// meant to keep *other local processes* from talking to the autopilot
+/// service, not a cryptographic key - it does not need CSPRNG-grade
+/// guarantees for that threat model.
+fn generate_token() -> String {
+    fn splitmix64(mut x: u64) -> u64 {
+        x = x.wrapping_add(0x9E3779B97F4A7C15);
+        let mut z = x;
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D049BB133111EB);
+        z ^ (z >> 31)
+    }
+
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(0);
+    let pid = std::process::id() as u64;
+    let stack_addr = &nanos as *const u64 as u64;
+
+    let mut seed = nanos ^ pid.rotate_left(17) ^ stack_addr.rotate_left(33);
+    let mut out = String::with_capacity(96);
+    for _ in 0..6 {
+        seed = splitmix64(seed);
+        out.push_str(&format!("{seed:016x}"));
+    }
+    out
 }
 
 impl AutopilotService {
@@ -38,6 +76,11 @@ impl AutopilotService {
 
     pub fn base_url(&self) -> String {
         format!("http://127.0.0.1:{}", self.port())
+    }
+
+    /// The shared secret to send as `X-Autopilot-Token` on every request.
+    pub fn token(&self) -> String {
+        self.token.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     pub fn is_spawned(&self) -> bool {
@@ -80,6 +123,7 @@ impl AutopilotService {
             .env("AUTOPILOT_DATA_DIR", data_dir)
             .env("AUTOPILOT_PORT", port.to_string())
             .env("AUTOPILOT_LLM_BASE_URL", ollama_url)
+            .env("AUTOPILOT_AUTH_TOKEN", self.token())
             .stdout(stdout_cfg)
             .stderr(stderr_cfg)
             .spawn()
@@ -106,7 +150,11 @@ impl AutopilotService {
             .timeout(Duration::from_secs(2))
             .build()
         {
-            let _ = c.post(format!("{base}/shutdown")).send().await;
+            let _ = c
+                .post(format!("{base}/shutdown"))
+                .header("X-Autopilot-Token", self.token())
+                .send()
+                .await;
         }
         tokio::time::sleep(Duration::from_millis(600)).await;
         self.stop();
@@ -237,7 +285,7 @@ pub async fn health_check(base_url: &str) -> bool {
 }
 
 /// Forward LinkedIn cookies to the autopilot service.
-pub async fn send_cookies(base_url: &str, li_at: &str, jsessionid: &str) -> Result<(), String> {
+pub async fn send_cookies(base_url: &str, token: &str, li_at: &str, jsessionid: &str) -> Result<(), String> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(5))
         .build()
@@ -245,6 +293,7 @@ pub async fn send_cookies(base_url: &str, li_at: &str, jsessionid: &str) -> Resu
 
     let resp = client
         .post(format!("{base_url}/autopilot/session"))
+        .header("X-Autopilot-Token", token)
         .json(&serde_json::json!({ "li_at": li_at, "jsessionid": jsessionid }))
         .send()
         .await

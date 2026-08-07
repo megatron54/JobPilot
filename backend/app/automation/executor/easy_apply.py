@@ -14,6 +14,38 @@ from dataclasses import dataclass
 from ..profile import UserProfile
 from .answers import answer_text_question, choose_option
 
+# Labels matching any of these keywords are never auto-answered by the LLM.
+# These are legally/factually sensitive questions (work authorization, visa
+# sponsorship, EEO self-identification, security clearance, etc.) where a
+# hallucinated or wrong answer submitted on a real application could have
+# real consequences for the candidate. They are left blank for the user to
+# fill in manually before submitting.
+_SENSITIVE_LABEL_KEYWORDS = (
+    "authoriz",  # work authorization / authorized to work
+    "sponsor",  # visa sponsorship
+    "visa",
+    "citizen",
+    "legally",
+    "security clearance",
+    "clearance",
+    "disability",
+    "veteran",
+    "race",
+    "ethnic",
+    "gender",
+    "pronoun",
+    "background check",
+    "criminal",
+    "felony",
+    "salary",  # salary expectations should be set deliberately, not guessed
+    "compensation",
+)
+
+
+def is_sensitive_label(label: str) -> bool:
+    low = (label or "").lower()
+    return any(k in low for k in _SENSITIVE_LABEL_KEYWORDS)
+
 logger = logging.getLogger("jobpilot.autopilot.easy_apply")
 
 _JOB_URL = "https://www.linkedin.com/jobs/view/{job_id}/"
@@ -139,7 +171,7 @@ async def _fill_visible_fields(
                 if (await el.input_value()).strip():
                     continue
                 label = await _label_for(page, el)
-                if label:
+                if label and not is_sensitive_label(label):
                     ans = await answer_text_question(
                         label, profile, job_title, company, cv_text
                     )
@@ -161,6 +193,8 @@ async def _fill_visible_fields(
                 if not options:
                     continue
                 label = await _label_for(page, el)
+                if is_sensitive_label(label):
+                    continue
                 choice = await choose_option(label, options, profile, job_title)
                 if choice:
                     await el.select_option(label=choice)

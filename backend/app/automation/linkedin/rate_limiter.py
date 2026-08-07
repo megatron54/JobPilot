@@ -31,13 +31,29 @@ class RateLimiter:
 
     async def acquire(self) -> None:
         await self._sem.acquire()
-        async with self._lock:
-            now = time.monotonic()
-            wait = random.uniform(self._min, self._max)
-            elapsed = now - self._last_call
-            if elapsed < wait:
-                await asyncio.sleep(wait - elapsed)
-            self._last_call = time.monotonic()
+        try:
+            # Compute (and reserve) the required spacing under the lock, but
+            # sleep *outside* of it, so other concurrent callers can proceed
+            # to acquire the semaphore/compute their own spacing instead of
+            # being serialized behind this call's sleep (which previously
+            # collapsed effective concurrency to 1 during delays).
+            async with self._lock:
+                now = time.monotonic()
+                wait = random.uniform(self._min, self._max)
+                elapsed = now - self._last_call
+                sleep_for = max(0.0, wait - elapsed)
+                # Reserve the next slot immediately so overlapping callers
+                # still get spaced-out slots rather than racing on the same
+                # `_last_call` timestamp.
+                self._last_call = now + sleep_for
+
+            if sleep_for > 0:
+                await asyncio.sleep(sleep_for)
+        except BaseException:
+            # Guarantee the semaphore permit is not leaked if acquire is
+            # cancelled (e.g. during the sleep) or otherwise fails.
+            self._sem.release()
+            raise
 
     def release(self) -> None:
         self._sem.release()

@@ -8,8 +8,9 @@ lifespan). All access goes through the `Database` class.
 from __future__ import annotations
 
 import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, AsyncIterator, Iterable
 
 import aiosqlite
 
@@ -25,6 +26,14 @@ class Database:
     def __init__(self, db_path: Path) -> None:
         self._path = db_path
         self._conn: aiosqlite.Connection | None = None
+        # Serializes multi-statement write sequences (e.g. "record an
+        # optimistic action, call the network, roll back on failure") so
+        # they behave atomically with respect to *other coroutines in this
+        # process*, even though each individual statement already
+        # auto-commits. See `transaction()`.
+        import asyncio
+
+        self._write_lock = asyncio.Lock()
 
     @property
     def conn(self) -> aiosqlite.Connection:
@@ -83,6 +92,18 @@ class Database:
     async def fetch_all(self, sql: str, params: Iterable[Any] = ()) -> list[aiosqlite.Row]:
         cur = await self.conn.execute(sql, tuple(params))
         return list(await cur.fetchall())
+
+    @asynccontextmanager
+    async def transaction(self) -> AsyncIterator[None]:
+        """Serialize a multi-statement write sequence against other callers
+        in this process. Does not (and cannot, since it may wrap an
+        external network call) provide SQL-level ACID rollback across the
+        whole block - use it to prevent interleaving of check-then-act
+        sequences such as recording a daily-limit counter before/after an
+        outbound API call.
+        """
+        async with self._write_lock:
+            yield
 
 
 # Module-level singleton, initialized in the FastAPI lifespan.

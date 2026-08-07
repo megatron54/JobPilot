@@ -16,6 +16,19 @@ class SessionCookies(BaseModel):
     jsessionid: str = Field(default="", description="Used for the csrf-token header")
 
 
+class ExecuteApplyRequest(BaseModel):
+    """Request body for POST /autopilot/execute/apply.
+
+    Explicit schema (instead of a raw dict) so `auto_submit` - which can
+    trigger a real, automatic submission of a job application - is always
+    validated as a proper boolean and never silently defaults from
+    unexpected payload shapes.
+    """
+
+    job_id: str = Field(..., min_length=1)
+    auto_submit: bool = False
+
+
 class SessionStatus(BaseModel):
     has_session: bool
     li_at_present: bool

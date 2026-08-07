@@ -13,6 +13,7 @@ from dataclasses import dataclass
 
 from ...profile import UserProfile
 from ..answers import answer_text_question
+from ..easy_apply import is_sensitive_label
 from .detector import FormField, classify_fields
 from ..field_mapping import value_for_field
 
@@ -152,6 +153,8 @@ async def _fill_fields(
                 except Exception:  # noqa: BLE001
                     pass
             elif f.category == "custom_question":
+                if is_sensitive_label(f.label):
+                    continue
                 ans = await answer_text_question(
                     f.label, profile, job_title, company, cv_text
                 )
