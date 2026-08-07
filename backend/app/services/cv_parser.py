@@ -1,12 +1,12 @@
 """CV and document parser service."""
 
-import os
 from pathlib import Path
 
 import pdfplumber
 from markitdown import MarkItDown
 
 from app.core.config import settings
+from app.core.security import safe_join
 
 
 def parse_cv(file_path: str) -> str:
@@ -54,7 +54,11 @@ def list_cvs() -> list[dict]:
 
 def get_cv_content(filename: str) -> str:
     """Get parsed content of a specific CV."""
-    cv_path = Path(settings.cv_dir) / filename
+    cv_dir = Path(settings.cv_dir)
+    try:
+        cv_path = safe_join(cv_dir, filename)
+    except ValueError:
+        raise FileNotFoundError(f"CV not found: {filename}") from None
     if not cv_path.exists():
         raise FileNotFoundError(f"CV not found: {filename}")
     return parse_cv(str(cv_path))

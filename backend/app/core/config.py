@@ -9,9 +9,12 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.7
 
     # Server
-    host: str = "0.0.0.0"
+    host: str = "127.0.0.1"
     port: int = 8000
     root_path: str = ""
+
+    # CORS - comma-separated list of allowed origins for local clients
+    allowed_origins: str = "http://localhost:3000,http://127.0.0.1:3000,tauri://localhost,http://tauri.localhost"
 
     # Data
     data_dir: str = "./data"

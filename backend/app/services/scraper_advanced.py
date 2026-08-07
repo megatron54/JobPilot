@@ -7,6 +7,8 @@ Install with: pip install jobpilot[scraping] && playwright install chromium
 import logging
 import re
 
+from app.core.security import assert_safe_http_url
+
 logger = logging.getLogger("jobpilot.scraper_advanced")
 
 _PLAYWRIGHT_AVAILABLE = False
@@ -22,7 +24,7 @@ def is_available() -> bool:
     return _PLAYWRIGHT_AVAILABLE
 
 
-async def scrape_with_browser(url: str, wait_selector: str = None, wait_time: int = 3000) -> str:
+async def scrape_with_browser(url: str, wait_selector: str | None = None, wait_time: int = 3000) -> str:
     """Scrape a page using a headless browser (Playwright).
     
     Use this for pages that require JavaScript rendering (LinkedIn login wall, SPAs, etc.).
@@ -40,6 +42,8 @@ async def scrape_with_browser(url: str, wait_selector: str = None, wait_time: in
             "Playwright is not installed. Install with: "
             "pip install playwright && playwright install chromium"
         )
+
+    assert_safe_http_url(url)
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)

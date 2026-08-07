@@ -2,6 +2,7 @@ use crate::document::{extract_text, SUPPORTED_EXTENSIONS};
 use crate::llm::{chat_completion, stream_chat, ChatMessage};
 use crate::ollama;
 use crate::scraper as job_scraper;
+use crate::security::{safe_join, safe_slug, safe_truncate};
 use crate::state::{AppState, JobOffer, Profile};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -200,13 +201,13 @@ pub async fn upload_cv(state: State<'_, AppState>, path: String) -> Result<CvInf
         return Err(format!("Unsupported file type: .{ext}. Supported: pdf, docx, txt, md"));
     }
 
-    let filename = src.file_name().unwrap().to_string_lossy().to_string();
+    let filename = src.file_name().ok_or("Invalid source file path")?.to_string_lossy().to_string();
     let data_dir = state.data_dir.read().await.clone();
     let cvs_dir = data_dir.join("cvs");
     fs::create_dir_all(&cvs_dir).map_err(|e| e.to_string())?;
 
-    // Copy file
-    let dest = cvs_dir.join(&filename);
+    // Copy file (filename re-validated against the destination directory)
+    let dest = safe_join(&cvs_dir, &filename)?;
     fs::copy(&src, &dest).map_err(|e| format!("Failed to copy file: {e}"))?;
 
     // Extract text
@@ -214,7 +215,7 @@ pub async fn upload_cv(state: State<'_, AppState>, path: String) -> Result<CvInf
     let char_count = text.len();
 
     // Save extracted text
-    let text_path = cvs_dir.join(format!("{}.txt", filename));
+    let text_path = safe_join(&cvs_dir, &format!("{}.txt", filename))?;
     let _ = fs::write(&text_path, &text);
 
     // Update state
@@ -237,14 +238,14 @@ pub async fn delete_cv(state: State<'_, AppState>, filename: String) -> Result<(
     let data_dir = state.data_dir.read().await.clone();
     let cvs_dir = data_dir.join("cvs");
 
-    // Remove the file
-    let file_path = cvs_dir.join(&filename);
+    // Remove the file (filename validated against path traversal)
+    let file_path = safe_join(&cvs_dir, &filename)?;
     if file_path.exists() {
         fs::remove_file(&file_path).map_err(|e| format!("Failed to delete file: {e}"))?;
     }
 
     // Remove the extracted .txt
-    let txt_path = cvs_dir.join(format!("{}.txt", filename));
+    let txt_path = safe_join(&cvs_dir, &format!("{}.txt", filename))?;
     if txt_path.exists() {
         let _ = fs::remove_file(&txt_path);
     }
@@ -316,7 +317,7 @@ Return this exact JSON structure:
 }}
 
 CRITICAL: Return ONLY the JSON object. No markdown, no explanation."#,
-        &cv_text[..cv_text.len().min(6000)]
+        safe_truncate(&cv_text, 6000)
     );
 
     let messages = vec![
@@ -410,7 +411,7 @@ Return this exact JSON:
 }}
 
 CRITICAL: Return ONLY the JSON. No explanation."#,
-        &clean_text[..clean_text.len().min(8000)]
+        safe_truncate(&clean_text, 8000)
     );
 
     let messages = vec![
@@ -526,7 +527,7 @@ Return this exact JSON:
 }}
 
 CRITICAL: Return ONLY the JSON. No explanation."#,
-        &clean_text[..clean_text.len().min(8000)],
+        safe_truncate(&clean_text, 8000),
         url,
         url
     );
@@ -625,8 +626,8 @@ pub async fn add_job(state: State<'_, AppState>, request: AddJobRequest) -> Resu
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
-    let company_slug = company.to_lowercase().replace(' ', "_");
-    let position_slug = position.to_lowercase().replace(' ', "_");
+    let company_slug = safe_slug(&company);
+    let position_slug = safe_slug(&position);
     let id = format!("{}_{}_{}",
         if company_slug.is_empty() { "unknown" } else { &company_slug },
         if position_slug.is_empty() { "unknown" } else { &position_slug },
@@ -650,7 +651,7 @@ pub async fn add_job(state: State<'_, AppState>, request: AddJobRequest) -> Resu
     let data_dir = state.data_dir.read().await.clone();
     let jobs_dir = data_dir.join("jobs");
     fs::create_dir_all(&jobs_dir).map_err(|e| e.to_string())?;
-    let job_path = jobs_dir.join(format!("{}.json", &id));
+    let job_path = safe_join(&jobs_dir, &format!("{}.json", &id))?;
     let json = serde_json::to_string_pretty(&job).map_err(|e| e.to_string())?;
     fs::write(&job_path, &json).map_err(|e| format!("Failed to save job: {e}"))?;
 
@@ -664,7 +665,8 @@ pub async fn add_job(state: State<'_, AppState>, request: AddJobRequest) -> Resu
 #[tauri::command]
 pub async fn delete_job(state: State<'_, AppState>, job_id: String) -> Result<(), String> {
     let data_dir = state.data_dir.read().await.clone();
-    let job_path = data_dir.join("jobs").join(format!("{}.json", &job_id));
+    let jobs_dir = data_dir.join("jobs");
+    let job_path = safe_join(&jobs_dir, &format!("{}.json", &job_id))?;
     if job_path.exists() {
         fs::remove_file(&job_path).map_err(|e| e.to_string())?;
     }
@@ -734,10 +736,10 @@ pub async fn generate_cover_letter(
          --- CANDIDATE ---\nName: {name}\nTitle: {title}\nSkills: {skills}\nExperience: {exp} years\n\
          {recruiter_line}\n\
          Write ONLY the letter, no meta-commentary.",
-        cv_text = &cv_text[..cv_text.len().min(4000)],
+        cv_text = safe_truncate(&cv_text, 4000),
         company = job.company,
         position = job.position,
-        desc = &job.raw_description[..job.raw_description.len().min(2000)],
+        desc = safe_truncate(&job.raw_description, 2000),
         name = profile.name,
         title = profile.title,
         skills = profile.key_skills.join(", "),
@@ -800,10 +802,10 @@ pub async fn generate_recruiter_message(
         name = profile.name,
         title = profile.title,
         skills = profile.key_skills.join(", "),
-        cv_text = &cv_text[..cv_text.len().min(2000)],
+        cv_text = safe_truncate(&cv_text, 2000),
         company = job.company,
         position = job.position,
-        desc = &job.raw_description[..job.raw_description.len().min(1000)],
+        desc = safe_truncate(&job.raw_description, 1000),
         recruiter_line = if recruiter.is_empty() { String::new() } else { format!("Recruiter name: {recruiter}") },
     );
 
@@ -855,7 +857,7 @@ pub async fn generate_interview_answer(
          --- TARGET POSITION ---\nCompany: {company}\nPosition: {position}\n\n\
          Provide:\n1. A structured answer\n2. Delivery tips",
         question = request.question,
-        cv_text = &cv_text[..cv_text.len().min(3000)],
+        cv_text = safe_truncate(&cv_text, 3000),
         name = profile.name,
         title = profile.title,
         skills = profile.key_skills.join(", "),
@@ -899,7 +901,7 @@ pub async fn generate_interview_questions(
          Format as numbered list with brief note on why they'd ask each.",
         company = job.company,
         position = job.position,
-        desc = &job.raw_description[..job.raw_description.len().min(2000)],
+        desc = safe_truncate(&job.raw_description, 2000),
         title = profile.title,
         exp = profile.years_experience,
     );

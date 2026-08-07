@@ -1,12 +1,23 @@
+use crate::security::assert_safe_http_url;
 use reqwest::Client;
 use scraper::{Html, Selector};
 use std::time::Duration;
 
 /// Scrape a job posting URL and return the raw text content
 pub async fn scrape_job_url(url: &str) -> Result<ScrapedJob, String> {
+    assert_safe_http_url(url)?;
+
     let client = Client::builder()
         .timeout(Duration::from_secs(30))
-        .redirect(reqwest::redirect::Policy::limited(5))
+        .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            if attempt.previous().len() > 5 {
+                return attempt.error("too many redirects");
+            }
+            match assert_safe_http_url(attempt.url().as_str()) {
+                Ok(()) => attempt.follow(),
+                Err(e) => attempt.error(std::io::Error::new(std::io::ErrorKind::Other, e)),
+            }
+        }))
         .build()
         .map_err(|e| format!("HTTP client error: {e}"))?;
 

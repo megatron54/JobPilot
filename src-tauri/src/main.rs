@@ -8,6 +8,7 @@ mod linkedin;
 mod llm;
 mod ollama;
 mod scraper;
+mod security;
 mod state;
 
 use autopilot::AutopilotService;
