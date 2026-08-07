@@ -33,7 +33,7 @@ impl Default for AutopilotService {
 
 impl AutopilotService {
     pub fn port(&self) -> u16 {
-        *self.port.lock().unwrap()
+        *self.port.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     pub fn base_url(&self) -> String {
@@ -41,7 +41,7 @@ impl AutopilotService {
     }
 
     pub fn is_spawned(&self) -> bool {
-        self.child.lock().unwrap().is_some()
+        self.child.lock().unwrap_or_else(|e| e.into_inner()).is_some()
     }
 
     /// Spawn the Python automation service if not already running.
@@ -52,8 +52,8 @@ impl AutopilotService {
         }
 
         let (python, backend_dir) = locate_python_backend()?;
-        let port = pick_port(*self.port.lock().unwrap());
-        *self.port.lock().unwrap() = port;
+        let port = pick_port(*self.port.lock().unwrap_or_else(|e| e.into_inner()));
+        *self.port.lock().unwrap_or_else(|e| e.into_inner()) = port;
 
         // Redirect child output to a log file for debugging startup issues.
         let (stdout_cfg, stderr_cfg) = match open_log_file(data_dir) {
@@ -85,14 +85,14 @@ impl AutopilotService {
             .spawn()
             .map_err(|e| format!("Failed to spawn autopilot service: {e}"))?;
 
-        *self.child.lock().unwrap() = Some(child);
+        *self.child.lock().unwrap_or_else(|e| e.into_inner()) = Some(child);
         Ok(())
     }
 
     /// Kill the child process. Synchronous; safe to call from the exit handler.
     /// For a graceful HTTP shutdown first, call `graceful_shutdown` (async).
     pub fn stop(&self) {
-        if let Some(mut child) = self.child.lock().unwrap().take() {
+        if let Some(mut child) = self.child.lock().unwrap_or_else(|e| e.into_inner()).take() {
             let _ = child.kill();
             let _ = child.wait();
         }
@@ -132,7 +132,9 @@ fn locate_python_backend() -> Result<(PathBuf, PathBuf), String> {
         return Ok((venv_python, backend_dir));
     }
 
-    // 2. System Python on PATH
+    // 2. System Python on PATH (residual trust: assumes the user's PATH is
+    // not compromised; the backend_dir itself is now tightly scoped, see
+    // locate_backend_dir).
     if let Ok(p) = which::which("python") {
         return Ok((p, backend_dir));
     }
@@ -143,32 +145,37 @@ fn locate_python_backend() -> Result<(PathBuf, PathBuf), String> {
     Err("Python not found. Install Python 3.12+ or create backend/.venv.".to_string())
 }
 
-/// Find the `backend` directory by walking up from known base locations.
+/// Find the `backend` directory near the executable or the current working
+/// directory (dev mode).
+///
+/// SECURITY: intentionally does NOT walk up the entire filesystem ancestry
+/// and does NOT fall back to arbitrary directories. Only a small, fixed set
+/// of well-known relative locations is checked, so that running the app
+/// from an untrusted working directory cannot cause it to pick up and
+/// execute a malicious `backend/app/automation/main.py`.
 fn locate_backend_dir() -> Result<PathBuf, String> {
     let mut candidates: Vec<PathBuf> = Vec::new();
 
-    // Current working directory and ancestors.
+    // Development layout: repo_root/backend, invoked from repo_root or
+    // repo_root/src-tauri.
     if let Ok(cwd) = std::env::current_dir() {
         candidates.push(cwd.join("backend"));
-        let mut dir = cwd.clone();
-        while let Some(parent) = dir.parent() {
-            candidates.push(parent.join("backend"));
-            dir = parent.to_path_buf();
-        }
+        candidates.push(cwd.join("..").join("backend"));
     }
 
-    // Executable directory and ancestors (for bundled/dev builds).
+    // Installed/bundled layout: backend/ shipped next to the executable.
     if let Ok(exe) = std::env::current_exe() {
-        let mut dir = exe.parent().map(|p| p.to_path_buf());
-        while let Some(d) = dir {
-            candidates.push(d.join("backend"));
-            dir = d.parent().map(|p| p.to_path_buf());
+        if let Some(exe_dir) = exe.parent() {
+            candidates.push(exe_dir.join("backend"));
+            candidates.push(exe_dir.join("..").join("backend"));
+            candidates.push(exe_dir.join("resources").join("backend"));
         }
     }
 
     for c in candidates {
-        if c.join("app").join("automation").join("main.py").exists() {
-            return Ok(c);
+        let marker = c.join("app").join("automation").join("main.py");
+        if marker.exists() {
+            return c.canonicalize().map_err(|e| e.to_string());
         }
     }
 

@@ -1,6 +1,5 @@
 """FastAPI routes for JobPilot."""
 
-import shutil
 from pathlib import Path
 
 from fastapi import APIRouter, UploadFile, File, HTTPException
@@ -16,8 +15,11 @@ from app.services.job_manager import save_job_offer, list_jobs, get_job, delete_
 from app.services.profile_manager import get_profile, save_profile
 from app.services.scraper import scrape_job_url
 from app.core.config import settings
+from app.core.security import safe_join, safe_slug, assert_safe_http_url, UnsafeURLError
 
 router = APIRouter(prefix="/api")
+
+MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB
 
 
 # ─── Profile ───────────────────────────────────────────────────────────
@@ -65,15 +67,27 @@ async def upload_cv(file: UploadFile = File(...)):
     cv_dir.mkdir(parents=True, exist_ok=True)
 
     supported = {".pdf", ".docx", ".doc", ".md", ".txt"}
-    ext = Path(file.filename).suffix.lower()
-    if ext not in supported:
+    original_name = Path(file.filename or "").name
+    ext = Path(original_name).suffix.lower()
+    if not original_name or ext not in supported:
         raise HTTPException(400, f"Unsupported file type: {ext}. Supported: {supported}")
 
-    dest = cv_dir / file.filename
-    with open(dest, "wb") as f:
-        shutil.copyfileobj(file.file, f)
+    try:
+        dest = safe_join(cv_dir, original_name)
+    except ValueError:
+        raise HTTPException(400, "Invalid filename")
 
-    return {"filename": file.filename, "status": "uploaded"}
+    written = 0
+    with open(dest, "wb") as f:
+        while chunk := await file.read(1024 * 1024):
+            written += len(chunk)
+            if written > MAX_UPLOAD_BYTES:
+                f.close()
+                dest.unlink(missing_ok=True)
+                raise HTTPException(413, "File too large (max 20 MB)")
+            f.write(chunk)
+
+    return {"filename": dest.name, "status": "uploaded"}
 
 
 @router.get("/cvs/{filename}/content")
@@ -83,7 +97,7 @@ async def get_cv_text(filename: str):
         content = get_cv_content(filename)
         return {"filename": filename, "content": content}
     except FileNotFoundError:
-        raise HTTPException(404, f"CV not found: {filename}")
+        raise HTTPException(404, f"CV not found: {filename}") from None
 
 
 # ─── Jobs ──────────────────────────────────────────────────────────────
@@ -112,15 +126,20 @@ async def scrape_job(req: ScrapeJobRequest):
     """Scrape a job posting URL and return extracted content (preview, not saved yet)."""
     if not req.url:
         raise HTTPException(400, "URL is required")
-    
+
+    try:
+        assert_safe_http_url(req.url)
+    except UnsafeURLError:
+        raise HTTPException(400, "URL not allowed")
+
     scraped = await scrape_job_url(req.url, use_browser=req.use_browser)
-    
+
     if scraped.get("error"):
-        raise HTTPException(502, f"Could not scrape URL: {scraped['error']}")
-    
+        raise HTTPException(502, "Could not scrape URL")
+
     if not scraped.get("raw_text"):
         raise HTTPException(502, "Could not extract content from the page")
-    
+
     return {
         "scraped": scraped,
         "message": "Content extracted. Use POST /api/jobs to save it.",
@@ -132,13 +151,18 @@ async def scrape_and_save_job(req: ScrapeJobRequest):
     """Scrape a job posting URL, analyze with AI, and save it directly."""
     if not req.url:
         raise HTTPException(400, "URL is required")
-    
+
+    try:
+        assert_safe_http_url(req.url)
+    except UnsafeURLError:
+        raise HTTPException(400, "URL not allowed")
+
     # Step 1: Scrape the page
     scraped = await scrape_job_url(req.url)
-    
+
     if scraped.get("error"):
-        raise HTTPException(502, f"Could not scrape URL: {scraped['error']}")
-    
+        raise HTTPException(502, "Could not scrape URL")
+
     if not scraped.get("raw_text"):
         raise HTTPException(502, "Could not extract content from the page")
     
@@ -178,9 +202,13 @@ async def create_job_offer(req: JobOfferRequest):
 
     # If URL provided but no description, scrape it
     if job_data.get("url") and not job_data.get("raw_description"):
+        try:
+            assert_safe_http_url(job_data["url"])
+        except UnsafeURLError:
+            raise HTTPException(400, "URL not allowed")
         scraped = await scrape_job_url(job_data["url"])
         if scraped.get("error"):
-            raise HTTPException(502, f"Could not scrape URL: {scraped['error']}")
+            raise HTTPException(502, "Could not scrape URL")
         job_data["raw_description"] = scraped.get("raw_text", "")
         job_data["source"] = scraped.get("source", "web")
         # Use scraped metadata as hints
@@ -212,7 +240,7 @@ async def get_job_offer(job_id: str):
     try:
         return get_job(job_id)
     except FileNotFoundError:
-        raise HTTPException(404, f"Job not found: {job_id}")
+        raise HTTPException(404, f"Job not found: {job_id}") from None
 
 
 @router.delete("/jobs/{job_id}")
@@ -266,7 +294,7 @@ async def gen_cover_letter(req: GenerateCoverLetterRequest):
         )
         return {"content": result, "type": "cover_letter"}
     except FileNotFoundError as e:
-        raise HTTPException(404, str(e))
+        raise HTTPException(404, str(e)) from e
 
 
 @router.post("/generate/cover-letter/stream")
@@ -286,7 +314,7 @@ async def gen_cover_letter_stream(req: GenerateCoverLetterRequest):
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
     except FileNotFoundError as e:
-        raise HTTPException(404, str(e))
+        raise HTTPException(404, str(e)) from e
 
 
 @router.post("/generate/recruiter-message")
@@ -303,7 +331,7 @@ async def gen_recruiter_message(req: GenerateMessageRequest):
         )
         return {"content": result, "type": "recruiter_message", "message_type": req.message_type}
     except FileNotFoundError as e:
-        raise HTTPException(404, str(e))
+        raise HTTPException(404, str(e)) from e
 
 
 @router.post("/generate/recruiter-message/stream")
@@ -324,7 +352,7 @@ async def gen_recruiter_message_stream(req: GenerateMessageRequest):
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
     except FileNotFoundError as e:
-        raise HTTPException(404, str(e))
+        raise HTTPException(404, str(e)) from e
 
 
 @router.post("/generate/interview-answer")
@@ -340,7 +368,7 @@ async def gen_interview_answer(req: GenerateAnswerRequest):
         )
         return {"content": result, "type": "interview_answer", "question": req.question}
     except FileNotFoundError as e:
-        raise HTTPException(404, str(e))
+        raise HTTPException(404, str(e)) from e
 
 
 @router.post("/generate/interview-answer/stream")
@@ -360,7 +388,7 @@ async def gen_interview_answer_stream(req: GenerateAnswerRequest):
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
     except FileNotFoundError as e:
-        raise HTTPException(404, str(e))
+        raise HTTPException(404, str(e)) from e
 
 
 @router.post("/generate/interview-questions")
@@ -374,7 +402,7 @@ async def gen_interview_questions(req: GenerateQuestionsRequest):
         )
         return {"content": result, "type": "interview_questions"}
     except FileNotFoundError as e:
-        raise HTTPException(404, str(e))
+        raise HTTPException(404, str(e)) from e
 
 
 # ─── Health ────────────────────────────────────────────────────────────

@@ -15,10 +15,10 @@ struct ModelInfo {
 
 /// Check if Ollama is reachable
 pub async fn is_running(base_url: &str) -> bool {
-    let client = Client::builder()
-        .timeout(Duration::from_secs(2))
-        .build()
-        .unwrap();
+    let client = match Client::builder().timeout(Duration::from_secs(2)).build() {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
     client
         .get(format!("{base_url}/api/tags"))
         .send()

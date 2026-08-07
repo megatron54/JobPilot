@@ -7,7 +7,11 @@ from urllib.parse import urlparse
 import httpx
 from bs4 import BeautifulSoup
 
+from app.core.security import assert_safe_http_url
+
 logger = logging.getLogger("jobpilot.scraper")
+
+MAX_RESPONSE_BYTES = 5 * 1024 * 1024  # 5 MB cap to avoid DoS via huge/malicious responses
 
 # Headers to mimic a real browser (avoid bot detection)
 BROWSER_HEADERS = {
@@ -37,6 +41,17 @@ async def scrape_job_url(url: str, use_browser: bool = False) -> dict:
     """
     parsed = urlparse(url)
     domain = parsed.netloc.lower()
+
+    try:
+        assert_safe_http_url(url)
+    except Exception as e:
+        logger.warning(f"Rejected unsafe URL {url}: {e}")
+        return {
+            "raw_text": "",
+            "url": url,
+            "source": _detect_source(domain),
+            "error": "URL not allowed",
+        }
 
     try:
         # Try Playwright first for LinkedIn (it requires JS rendering)
@@ -72,15 +87,32 @@ async def scrape_job_url(url: str, use_browser: bool = False) -> dict:
 
 
 async def _fetch_page(url: str) -> str:
-    """Fetch page HTML with browser-like headers."""
+    """Fetch page HTML with browser-like headers, capped in size.
+
+    Validates every redirect hop to prevent SSRF bypass via redirection to
+    internal/private addresses.
+    """
+
+    async def _validate_redirect(request: httpx.Request) -> None:
+        assert_safe_http_url(str(request.url))
+
     async with httpx.AsyncClient(
         timeout=30,
         follow_redirects=True,
+        max_redirects=5,
         headers=BROWSER_HEADERS,
+        event_hooks={"request": [_validate_redirect]},
     ) as client:
-        resp = await client.get(url)
-        resp.raise_for_status()
-        return resp.text
+        async with client.stream("GET", url) as resp:
+            resp.raise_for_status()
+            chunks = []
+            total = 0
+            async for chunk in resp.aiter_bytes():
+                total += len(chunk)
+                if total > MAX_RESPONSE_BYTES:
+                    raise ValueError("Response too large")
+                chunks.append(chunk)
+            return b"".join(chunks).decode(resp.encoding or "utf-8", errors="replace")
 
 
 async def _fetch_with_browser_fallback(url: str) -> str:

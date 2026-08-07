@@ -8,6 +8,39 @@ use aes_gcm::{Aes256Gcm, KeyInit, Nonce};
 use base64::Engine;
 use std::path::PathBuf;
 
+/// A temporary copy of a browser's cookies DB that is guaranteed to be
+/// deleted (best-effort) when dropped, even on early return via `?`.
+/// Avoids leaving a copy of the user's *entire* cookie jar sitting in
+/// `%TEMP%` with a predictable name if something fails mid-flow.
+struct TempCookiesFile(PathBuf);
+
+impl TempCookiesFile {
+    fn copy_from(source: &PathBuf) -> Result<Self, String> {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let path = std::env::temp_dir().join(format!(
+            "jobpilot_cookies_{}_{}.tmp",
+            std::process::id(),
+            nonce
+        ));
+        std::fs::copy(source, &path)
+            .map_err(|e| format!("Failed to copy cookies DB (browser may be locking it): {e}"))?;
+        Ok(Self(path))
+    }
+
+    fn path(&self) -> &PathBuf {
+        &self.0
+    }
+}
+
+impl Drop for TempCookiesFile {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
+
 /// A bundle of LinkedIn auth cookies needed for the Voyager API.
 #[derive(Default, Clone, serde::Serialize)]
 pub struct LinkedInCookies {
@@ -54,15 +87,10 @@ fn get_cookies_from_browser(browser: Browser) -> Result<LinkedInCookies, String>
 
     let master_key = get_master_key(&local_state_path)?;
 
-    let temp_dir = std::env::temp_dir();
-    let temp_cookies = temp_dir.join("jobpilot_cookies_multi_tmp");
-    std::fs::copy(&cookies_path, &temp_cookies)
-        .map_err(|e| format!("Failed to copy cookies DB (browser may be locking it): {e}"))?;
+    let temp_cookies = TempCookiesFile::copy_from(&cookies_path)?;
 
-    let li_at = query_cookie(&temp_cookies, &master_key, "li_at").unwrap_or_default();
-    let jsessionid = query_cookie(&temp_cookies, &master_key, "JSESSIONID").unwrap_or_default();
-
-    let _ = std::fs::remove_file(&temp_cookies);
+    let li_at = query_cookie(temp_cookies.path(), &master_key, "li_at").unwrap_or_default();
+    let jsessionid = query_cookie(temp_cookies.path(), &master_key, "JSESSIONID").unwrap_or_default();
 
     Ok(LinkedInCookies { li_at, jsessionid })
 }
@@ -77,7 +105,7 @@ fn query_cookie(db_path: &PathBuf, master_key: &[u8], name: &str) -> Result<Stri
 
     let mut stmt = conn
         .prepare(
-            "SELECT encrypted_value FROM cookies WHERE host_key LIKE '%linkedin.com' AND name = ?1 LIMIT 1",
+            "SELECT encrypted_value FROM cookies WHERE (host_key = 'www.linkedin.com' OR host_key = '.linkedin.com' OR host_key = 'linkedin.com') AND name = ?1 LIMIT 1",
         )
         .map_err(|e| format!("Failed to prepare query: {e}"))?;
 
@@ -124,19 +152,11 @@ fn get_cookie_from_browser(browser: Browser) -> Result<String, String> {
     // Read and decrypt the master key from Local State
     let master_key = get_master_key(&local_state_path)?;
 
-    // Copy cookies DB to temp (browser may lock it)
-    let temp_dir = std::env::temp_dir();
-    let temp_cookies = temp_dir.join("jobpilot_cookies_tmp");
-    std::fs::copy(&cookies_path, &temp_cookies)
-        .map_err(|e| format!("Failed to copy cookies DB (browser may be locking it): {e}"))?;
+    // Copy cookies DB to temp (browser may lock it); guaranteed cleanup via Drop
+    let temp_cookies = TempCookiesFile::copy_from(&cookies_path)?;
 
     // Query for li_at cookie
-    let result = query_linkedin_cookie(&temp_cookies, &master_key);
-
-    // Clean up temp file
-    let _ = std::fs::remove_file(&temp_cookies);
-
-    result
+    query_linkedin_cookie(temp_cookies.path(), &master_key)
 }
 
 fn get_master_key(local_state_path: &PathBuf) -> Result<Vec<u8>, String> {
@@ -218,7 +238,7 @@ fn query_linkedin_cookie(db_path: &PathBuf, master_key: &[u8]) -> Result<String,
 
     let mut stmt = conn
         .prepare(
-            "SELECT encrypted_value FROM cookies WHERE host_key LIKE '%linkedin.com' AND name = 'li_at' LIMIT 1",
+            "SELECT encrypted_value FROM cookies WHERE (host_key = 'www.linkedin.com' OR host_key = '.linkedin.com' OR host_key = 'linkedin.com') AND name = 'li_at' LIMIT 1",
         )
         .map_err(|e| format!("Failed to prepare query: {e}"))?;
 
