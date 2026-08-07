@@ -13,7 +13,7 @@ import JobMatchCard from '../components/autopilot/JobMatchCard';
 
 const TERMINAL = ['completed', 'failed', 'cancelled'];
 
-function isRecommended(job: DiscoveredJobRow): boolean {
+export function isRecommended(job: DiscoveredJobRow): boolean {
   return (job.score ?? 0) >= 70;
 }
 

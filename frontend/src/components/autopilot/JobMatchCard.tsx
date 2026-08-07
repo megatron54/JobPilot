@@ -6,7 +6,7 @@ import {
 import type { DiscoveredJobRow } from '../../services/api';
 
 /** Visual treatment for the /100 score badge, tiered by quality. */
-function scoreStyle(score: number | null): { text: string; bg: string; border: string } {
+export function scoreStyle(score: number | null): { text: string; bg: string; border: string } {
   if (score === null) return { text: 'text-gray-400', bg: 'bg-navy-700', border: 'border-navy-600' };
   if (score >= 80) return { text: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30' };
   if (score >= 60) return { text: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/30' };
@@ -14,14 +14,14 @@ function scoreStyle(score: number | null): { text: string; bg: string; border: s
   return { text: 'text-gray-400', bg: 'bg-navy-700', border: 'border-navy-600' };
 }
 
-function workplaceChip(type: string): string {
+export function workplaceChip(type: string): string {
   const t = type.toLowerCase();
   if (t.includes('remote')) return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
   if (t.includes('hybrid')) return 'bg-blue-500/10 text-blue-400 border-blue-500/30';
   return 'bg-navy-700 text-gray-400 border-navy-600';
 }
 
-function formatWorkplace(type: string): string {
+export function formatWorkplace(type: string): string {
   if (!type) return '';
   const t = type.toLowerCase();
   if (t.includes('remote')) return 'Remote';
