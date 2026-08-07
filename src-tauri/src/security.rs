@@ -154,4 +154,67 @@ mod tests {
     fn safe_truncate_shorter_than_max_returns_whole_string() {
         assert_eq!(safe_truncate("hola", 100), "hola");
     }
+
+    #[test]
+    fn safe_slug_strips_traversal_and_lowercases() {
+        assert_eq!(safe_slug("../../etc"), "etc");
+        assert_eq!(safe_slug("My Company Inc."), "my_company_inc");
+    }
+
+    #[test]
+    fn safe_slug_empty_or_only_traversal_yields_empty() {
+        // Note: unlike the Python `safe_slug`, this one does not fall back
+        // to a default string - callers (commands.rs::add_job) handle the
+        // empty case explicitly with "unknown".
+        assert_eq!(safe_slug(""), "");
+        assert_eq!(safe_slug("../../.."), "");
+    }
+
+    #[test]
+    fn assert_safe_http_url_rejects_non_http_schemes() {
+        assert!(assert_safe_http_url("file:///etc/passwd").is_err());
+        assert!(assert_safe_http_url("ftp://example.com").is_err());
+        assert!(assert_safe_http_url("javascript:alert(1)").is_err());
+    }
+
+    #[test]
+    fn assert_safe_http_url_rejects_loopback() {
+        assert!(assert_safe_http_url("http://127.0.0.1:11434/api/tags").is_err());
+        assert!(assert_safe_http_url("http://localhost:8765/autopilot/status").is_err());
+    }
+
+    #[test]
+    fn assert_safe_http_url_rejects_private_ranges() {
+        assert!(assert_safe_http_url("http://10.0.0.5/").is_err());
+        assert!(assert_safe_http_url("http://172.16.0.1/").is_err());
+        assert!(assert_safe_http_url("http://192.168.1.1/").is_err());
+    }
+
+    #[test]
+    fn assert_safe_http_url_rejects_link_local_and_cloud_metadata() {
+        assert!(assert_safe_http_url("http://169.254.169.254/latest/meta-data/").is_err());
+    }
+
+    #[test]
+    fn assert_safe_http_url_rejects_malformed_url() {
+        assert!(assert_safe_http_url("not a url").is_err());
+    }
+
+    #[test]
+    fn is_disallowed_v4_flags_loopback_private_link_local_and_broadcast() {
+        assert!(is_disallowed_v4(Ipv4Addr::new(127, 0, 0, 1)));
+        assert!(is_disallowed_v4(Ipv4Addr::new(10, 1, 2, 3)));
+        assert!(is_disallowed_v4(Ipv4Addr::new(192, 168, 1, 1)));
+        assert!(is_disallowed_v4(Ipv4Addr::new(169, 254, 1, 1)));
+        assert!(is_disallowed_v4(Ipv4Addr::new(255, 255, 255, 255)));
+        assert!(!is_disallowed_v4(Ipv4Addr::new(8, 8, 8, 8)));
+    }
+
+    #[test]
+    fn is_disallowed_v6_flags_loopback_and_link_local() {
+        assert!(is_disallowed_v6(Ipv6Addr::LOCALHOST));
+        assert!(is_disallowed_v6(Ipv6Addr::new(0xfe80, 0, 0, 0, 0, 0, 0, 1)));
+        assert!(is_disallowed_v6(Ipv6Addr::new(0xfc00, 0, 0, 0, 0, 0, 0, 1)));
+        assert!(!is_disallowed_v6(Ipv6Addr::new(0x2001, 0x4860, 0, 0, 0, 0, 0, 0x8888)));
+    }
 }
