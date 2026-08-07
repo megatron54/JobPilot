@@ -9,6 +9,7 @@ import {
   executeQueue, executeApply, getDailyUsage,
   type QueueAction, type DailyUsage, type ExecutionResult,
 } from '../services/api';
+import { isSafeExternalUrl } from '../utils/url';
 
 type ExecSummary = { connected: number; messaged: number; skipped: number; failed: number };
 
@@ -396,7 +397,7 @@ function QueueActionCard({
       {/* Meta row: job id + recruiter */}
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-500">
         <span className="font-mono truncate">job #{action.job_id}</span>
-        {action.target_profile_url && (
+        {action.target_profile_url && isSafeExternalUrl(action.target_profile_url) && (
           <a
             href={action.target_profile_url}
             target="_blank"

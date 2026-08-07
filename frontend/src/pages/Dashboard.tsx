@@ -10,9 +10,9 @@ export default function Dashboard() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    getHealth().then(setHealth).catch(() => {});
-    listCvs().then(setCvs).catch(() => {});
-    listJobs().then(setJobs).catch(() => {});
+    getHealth().then(setHealth).catch(e => console.error('Failed to load health status:', e));
+    listCvs().then(setCvs).catch(e => console.error('Failed to load CVs:', e));
+    listJobs().then(setJobs).catch(e => console.error('Failed to load jobs:', e));
   }, []);
 
   const ollamaConnected = health?.ollama_status === 'connected';

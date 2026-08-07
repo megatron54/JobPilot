@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { 
   listCvs, listJobs, 
@@ -24,15 +24,31 @@ export default function GeneratePage() {
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  // Tracks the unlisten functions for the currently in-flight streaming
+  // generation, so they can be cleaned up if the component unmounts (e.g.
+  // the user navigates away) mid-stream, instead of leaking Tauri event
+  // listeners.
+  const activeUnlistenersRef = useRef<Array<() => void>>([]);
+
   useEffect(() => {
-    listCvs().then(setCvs).catch(() => {});
-    listJobs().then(setJobs).catch(() => {});
+    listCvs().then(setCvs).catch(e => console.error('Failed to load CVs:', e));
+    listJobs().then(setJobs).catch(e => console.error('Failed to load jobs:', e));
+
+    return () => {
+      for (const unlisten of activeUnlistenersRef.current) unlisten();
+      activeUnlistenersRef.current = [];
+    };
   }, []);
 
   async function handleGenerate() {
     if (!selectedCv || !selectedJob) return;
     setLoading(true);
     setResult('');
+
+    // Clean up any listeners from a previous (unfinished) generation before
+    // registering new ones, so streams never overlap.
+    for (const unlisten of activeUnlistenersRef.current) unlisten();
+    activeUnlistenersRef.current = [];
 
     // Listen for streaming tokens
     let accumulated = '';
@@ -45,7 +61,10 @@ export default function GeneratePage() {
       setLoading(false);
       unlisten();
       unlistenDone();
+      activeUnlistenersRef.current = [];
     });
+
+    activeUnlistenersRef.current = [unlisten, unlistenDone];
 
     try {
       switch (genType) {
@@ -80,13 +99,15 @@ export default function GeneratePage() {
           setLoading(false);
           unlisten();
           unlistenDone();
+          activeUnlistenersRef.current = [];
           break;
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       setResult(`Error: ${String(e)}`);
       setLoading(false);
       unlisten();
       unlistenDone();
+      activeUnlistenersRef.current = [];
     }
   }
 
