@@ -13,7 +13,7 @@ import {
 type ExecSummary = { connected: number; messaged: number; skipped: number; failed: number };
 
 /** Chip styling + icon + label per action type. */
-function actionTypeMeta(type: QueueAction['action_type']) {
+export function actionTypeMeta(type: QueueAction['action_type']) {
   switch (type) {
     case 'apply_easy':
       return { label: 'Easy Apply', Icon: Zap, className: 'bg-blue-500/10 text-blue-400 border-blue-500/30' };
@@ -29,7 +29,7 @@ function actionTypeMeta(type: QueueAction['action_type']) {
 }
 
 /** Chip color for a queue-action status. */
-function statusChipClass(status: string): string {
+export function statusChipClass(status: string): string {
   switch (status) {
     case 'approved':
     case 'completed':
@@ -47,14 +47,14 @@ function statusChipClass(status: string): string {
   }
 }
 
-function formatStatus(status: string): string {
+export function formatStatus(status: string): string {
   if (!status) return 'Unknown';
   const spaced = status.replace(/_/g, ' ');
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
 /** Color the inline execute-apply result banner by outcome. */
-function execResultClass(status: string): string {
+export function execResultClass(status: string): string {
   const s = status.toLowerCase();
   if (s.includes('fail') || s.includes('error')) return 'bg-red-500/10 text-red-400 border-red-500/30';
   if (s.includes('success') || s.includes('applied') || s.includes('submitted') || s.includes('complete')) {

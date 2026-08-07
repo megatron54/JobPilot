@@ -37,15 +37,15 @@ const WEEKDAYS: { value: number; label: string }[] = [
   { value: 6, label: 'Sun' },
 ];
 
-function toggleStr(arr: string[], val: string): string[] {
+export function toggleStr(arr: string[], val: string): string[] {
   return arr.includes(val) ? arr.filter(x => x !== val) : [...arr, val];
 }
 
-function toggleNum(arr: number[], val: number): number[] {
+export function toggleNum(arr: number[], val: number): number[] {
   return arr.includes(val) ? arr.filter(x => x !== val) : [...arr, val];
 }
 
-function clampNum(n: number, min?: number, max?: number): number {
+export function clampNum(n: number, min?: number, max?: number): number {
   if (Number.isNaN(n)) return min ?? 0;
   if (min !== undefined && n < min) return min;
   if (max !== undefined && n > max) return max;
