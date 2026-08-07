@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { listJobs, addJob, deleteJob, uploadCv, listCvs, extractProfileFromCv, type JobOffer, type CvInfo } from '../services/api';
 import { Plus, Trash2, Globe, FileText, Loader2, Upload, Briefcase, Sparkles } from 'lucide-react';
+import { isSafeExternalUrl } from '../utils/url';
 
 export default function JobsPage() {
   const [jobs, setJobs] = useState<JobOffer[]>([]);
@@ -46,7 +47,7 @@ export default function JobsPage() {
       setCompany('');
       setPosition('');
       await loadJobs();
-    } catch (e: any) {
+    } catch (e: unknown) {
       setError(String(e));
     } finally {
       setLoading(false);
@@ -54,8 +55,12 @@ export default function JobsPage() {
   }
 
   async function handleDelete(jobId: string) {
-    await deleteJob(jobId);
-    await loadJobs();
+    try {
+      await deleteJob(jobId);
+      await loadJobs();
+    } catch (e) {
+      setError(`Failed to delete job: ${e}`);
+    }
   }
 
   async function handleUploadCv() {
@@ -248,8 +253,8 @@ export default function JobsPage() {
                 <div className="flex gap-3 mt-2 text-xs text-gray-500">
                   {job.location && <span>{job.location}</span>}
                   {job.source && <span className="bg-navy-700 px-2 py-0.5 rounded text-gray-400">{job.source}</span>}
-                  {job.url && (
-                    <a href={job.url} target="_blank" className="text-blue-400 hover:underline">view posting</a>
+                  {job.url && isSafeExternalUrl(job.url) && (
+                    <a href={job.url} target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">view posting</a>
                   )}
                 </div>
               </div>

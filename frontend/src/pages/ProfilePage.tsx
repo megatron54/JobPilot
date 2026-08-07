@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useId } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
 import {
   getProfile, saveProfile, resetProfile,
@@ -34,6 +34,8 @@ export default function ProfilePage() {
       setProfile(updated);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      setMessage(`Error saving profile: ${e}`);
     } finally {
       setSaving(false);
     }
@@ -226,6 +228,7 @@ export default function ProfilePage() {
                     onClick={() => handleDeleteCv(cv.filename)}
                     className="text-gray-600 hover:text-red-400 p-1 rounded hover:bg-red-500/10 transition-colors"
                     title="Delete document"
+                    aria-label={`Delete ${cv.filename}`}
                   >
                     <X size={14} />
                   </button>
@@ -326,8 +329,9 @@ export default function ProfilePage() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-1">Years of experience</label>
+          <label htmlFor="profile-years-experience" className="block text-sm font-medium text-gray-300 mb-1">Years of experience</label>
           <input
+            id="profile-years-experience"
             type="number"
             step="0.5"
             min="0"
@@ -338,8 +342,9 @@ export default function ProfilePage() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-1">Professional summary</label>
+          <label htmlFor="profile-summary" className="block text-sm font-medium text-gray-300 mb-1">Professional summary</label>
           <textarea
+            id="profile-summary"
             value={profile.summary}
             onChange={e => setProfile({ ...profile, summary: e.target.value })}
             rows={3}
@@ -350,17 +355,18 @@ export default function ProfilePage() {
 
         {/* Skills */}
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">Key skills</label>
+          <label htmlFor="profile-skill-input" className="block text-sm font-medium text-gray-300 mb-2">Key skills</label>
           <div className="flex flex-wrap gap-2 mb-3">
             {profile.key_skills.map((skill, i) => (
               <span key={i} className="bg-blue-600/20 text-blue-400 border border-blue-500/30 px-2.5 py-1 rounded-full text-xs flex items-center gap-1.5">
                 {skill}
-                <button onClick={() => removeSkill(i)} className="hover:text-red-400 transition-colors">&times;</button>
+                <button onClick={() => removeSkill(i)} aria-label={`Remove skill ${skill}`} className="hover:text-red-400 transition-colors">&times;</button>
               </span>
             ))}
           </div>
           <div className="flex gap-2">
             <input
+              id="profile-skill-input"
               type="text"
               value={skillInput}
               onChange={e => setSkillInput(e.target.value)}
@@ -377,8 +383,9 @@ export default function ProfilePage() {
           <h3 className="text-sm font-medium text-gray-300 mb-3">Generation Preferences</h3>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1">Preferred tone</label>
+              <label htmlFor="profile-tone" className="block text-xs font-medium text-gray-400 mb-1">Preferred tone</label>
               <select
+                id="profile-tone"
                 value={profile.tone}
                 onChange={e => setProfile({ ...profile, tone: e.target.value })}
                 className="w-full bg-navy-900 border border-navy-600 rounded-lg px-3 py-2.5 text-sm text-white"
@@ -389,8 +396,9 @@ export default function ProfilePage() {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1">Default language</label>
+              <label htmlFor="profile-language" className="block text-xs font-medium text-gray-400 mb-1">Default language</label>
               <select
+                id="profile-language"
                 value={profile.preferred_language}
                 onChange={e => setProfile({ ...profile, preferred_language: e.target.value })}
                 className="w-full bg-navy-900 border border-navy-600 rounded-lg px-3 py-2.5 text-sm text-white"
@@ -419,10 +427,12 @@ export default function ProfilePage() {
 }
 
 function Field({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
+  const inputId = useId();
   return (
     <div>
-      <label className="block text-sm font-medium text-gray-300 mb-1">{label}</label>
+      <label htmlFor={inputId} className="block text-sm font-medium text-gray-300 mb-1">{label}</label>
       <input
+        id={inputId}
         type="text"
         value={value}
         onChange={e => onChange(e.target.value)}

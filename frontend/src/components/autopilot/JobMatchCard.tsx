@@ -4,6 +4,7 @@ import {
   UserRound, Zap, Globe,
 } from 'lucide-react';
 import type { DiscoveredJobRow } from '../../services/api';
+import { isSafeExternalUrl } from '../../utils/url';
 
 /** Visual treatment for the /100 score badge, tiered by quality. */
 export function scoreStyle(score: number | null): { text: string; bg: string; border: string } {
@@ -116,7 +117,7 @@ export default function JobMatchCard({ job }: { job: DiscoveredJobRow }) {
         <div className="mt-3 flex items-center gap-1.5 text-xs text-gray-400">
           <UserRound size={13} className="text-gray-500" />
           <span>Recruiter:</span>
-          {job.recruiter_url ? (
+          {job.recruiter_url && isSafeExternalUrl(job.recruiter_url) ? (
             <a
               href={job.recruiter_url}
               target="_blank"
@@ -150,7 +151,7 @@ export default function JobMatchCard({ job }: { job: DiscoveredJobRow }) {
             value={hasApplyMethod ? (isEasyApply ? 'Easy Apply' : 'External') : '—'}
           />
           <DetailRow label="Status" value={job.status || '—'} />
-          {job.external_url && (
+          {job.external_url && isSafeExternalUrl(job.external_url) && (
             <div className="flex gap-2">
               <span className="text-gray-500 w-28 shrink-0">External URL</span>
               <a

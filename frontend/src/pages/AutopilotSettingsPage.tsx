@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Search, SlidersHorizontal, Save, Loader2, CheckCircle2,
@@ -143,8 +143,9 @@ export default function AutopilotSettingsPage() {
             />
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Location</label>
+              <label htmlFor="criteria-location" className="block text-sm font-medium text-gray-300 mb-1">Location</label>
               <input
+                id="criteria-location"
                 type="text"
                 value={criteria.location}
                 onChange={e => setCriteria({ ...criteria, location: e.target.value })}
@@ -191,8 +192,9 @@ export default function AutopilotSettingsPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Posted within (hours)</label>
+              <label htmlFor="criteria-posted-within" className="block text-sm font-medium text-gray-300 mb-1">Posted within (hours)</label>
               <input
+                id="criteria-posted-within"
                 type="number"
                 min={1}
                 value={criteria.posted_within_hours}
@@ -257,8 +259,9 @@ export default function AutopilotSettingsPage() {
             />
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Discovery source</label>
+              <label htmlFor="config-discovery-source" className="block text-sm font-medium text-gray-300 mb-2">Discovery source</label>
               <select
+                id="config-discovery-source"
                 value={config.discovery_source}
                 onChange={e => setConfig({ ...config, discovery_source: e.target.value as AutopilotConfig['discovery_source'] })}
                 className="w-full bg-navy-700 border border-navy-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
@@ -340,11 +343,12 @@ export default function AutopilotSettingsPage() {
 
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="block text-sm font-medium text-gray-300">Score threshold</label>
+                <label htmlFor="config-score-threshold" className="block text-sm font-medium text-gray-300">Score threshold</label>
                 <span className="text-sm font-semibold text-blue-400">{config.score_threshold}</span>
               </div>
               <div className="flex items-center gap-3">
                 <input
+                  id="config-score-threshold"
                   type="range"
                   min={0}
                   max={100}
@@ -354,6 +358,7 @@ export default function AutopilotSettingsPage() {
                 />
                 <input
                   type="number"
+                  aria-label="Score threshold (exact value)"
                   min={0}
                   max={100}
                   value={config.score_threshold}
@@ -399,6 +404,7 @@ function TagInput({ label, values, onChange, placeholder }: {
   placeholder?: string;
 }) {
   const [input, setInput] = useState('');
+  const inputId = useId();
 
   function add() {
     const parts = input.split(',').map(s => s.trim()).filter(Boolean);
@@ -417,19 +423,26 @@ function TagInput({ label, values, onChange, placeholder }: {
 
   return (
     <div>
-      <label className="block text-sm font-medium text-gray-300 mb-2">{label}</label>
+      <label htmlFor={inputId} className="block text-sm font-medium text-gray-300 mb-2">{label}</label>
       {values.length > 0 && (
         <div className="flex flex-wrap gap-2 mb-2">
           {values.map((v, i) => (
             <span key={`${v}-${i}`} className="bg-blue-600/20 text-blue-400 border border-blue-500/30 px-2.5 py-1 rounded-full text-xs flex items-center gap-1.5">
               {v}
-              <button onClick={() => remove(i)} className="hover:text-red-400 transition-colors">&times;</button>
+              <button
+                onClick={() => remove(i)}
+                aria-label={`Remove ${v}`}
+                className="hover:text-red-400 transition-colors"
+              >
+                &times;
+              </button>
             </span>
           ))}
         </div>
       )}
       <div className="flex gap-2">
         <input
+          id={inputId}
           type="text"
           value={input}
           onChange={e => setInput(e.target.value)}
@@ -469,7 +482,14 @@ function CheckRow({ label, checked, onChange }: { label: string; checked: boolea
 
 function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: () => void }) {
   return (
-    <button type="button" onClick={onChange} className="flex items-center gap-3 group">
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      onClick={onChange}
+      className="flex items-center gap-3 group"
+    >
       <span className={`relative w-10 h-6 rounded-full transition-colors ${checked ? 'bg-blue-600' : 'bg-navy-600'}`}>
         <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${checked ? 'translate-x-4' : ''}`} />
       </span>
@@ -487,10 +507,12 @@ function NumberField({ label, value, onChange, min, max, step = 1, hint }: {
   step?: number;
   hint?: string;
 }) {
+  const inputId = useId();
   return (
     <div>
-      <label className="block text-xs font-medium text-gray-400 mb-1">{label}</label>
+      <label htmlFor={inputId} className="block text-xs font-medium text-gray-400 mb-1">{label}</label>
       <input
+        id={inputId}
         type="number"
         value={value}
         min={min}
@@ -499,7 +521,7 @@ function NumberField({ label, value, onChange, min, max, step = 1, hint }: {
         onChange={e => onChange(clampNum(parseInt(e.target.value, 10), min, max))}
         className="w-full bg-navy-900 border border-navy-600 rounded-lg px-3 py-2 text-sm text-white"
       />
-      {hint && <p className="text-[11px] text-gray-600 mt-1">{hint}</p>}
+      {hint && <p className="text-[11px] text-gray-500 mt-1">{hint}</p>}
     </div>
   );
 }
