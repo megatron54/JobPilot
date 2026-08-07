@@ -16,17 +16,20 @@ import os
 import signal
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sse_starlette.sse import EventSourceResponse
 
 from .config import settings
 from .database import Database, set_db, get_db
 from .discovery import discover
+from ..core.rate_limit import RateLimitMiddleware
 from .jobs_repository import JobsRepository
 from .models import (
     ApiResponse,
     AutopilotConfig,
+    ExecuteApplyRequest,
     PipelineStatus,
     QueueActionUpdate,
     SearchCriteria,
@@ -51,6 +54,11 @@ async def lifespan(app: FastAPI):
     logger.info("Autopilot service started on %s:%d", settings.host, settings.port)
     logger.info("  Data dir: %s", settings.data_dir)
     logger.info("  DB: %s", settings.db_path)
+    if not settings.auth_token:
+        logger.warning(
+            "AUTOPILOT_AUTH_TOKEN is not set - the control API is unauthenticated. "
+            "This should only happen in local development."
+        )
     yield
     await db.close()
     logger.info("Autopilot service stopped")
@@ -66,6 +74,8 @@ app = FastAPI(
 # The service is reached server-side from the Tauri (Rust) host, not directly
 # from a browser. CORS is therefore restricted to local origins and does not
 # combine credentials with a wildcard (which is invalid and unsafe).
+app.add_middleware(RateLimitMiddleware, max_requests=120, window_seconds=60.0)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=r"^(https?://(localhost|127\.0\.0\.1)(:\d+)?|tauri://localhost)$",
@@ -73,6 +83,29 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["*"],
 )
+
+# Endpoints that never require the shared token (used before/without a
+# session, e.g. the Tauri host's initial readiness poll).
+_UNAUTHENTICATED_PATHS = {"/health"}
+
+
+@app.middleware("http")
+async def require_shared_token(request: Request, call_next):
+    """Require `X-Autopilot-Token` on every request except /health.
+
+    Without this, any local process (not just the Tauri host) could reach
+    this service's control plane on 127.0.0.1:<port> - including /shutdown,
+    the LinkedIn session cookie endpoint, and the apply/execute endpoints
+    that perform real actions on the user's behalf.
+    """
+    if request.url.path in _UNAUTHENTICATED_PATHS or not settings.auth_token:
+        return await call_next(request)
+
+    provided = request.headers.get("x-autopilot-token", "")
+    if provided != settings.auth_token:
+        return JSONResponse(status_code=401, content={"detail": "Missing or invalid autopilot token"})
+
+    return await call_next(request)
 
 
 # --- Health & lifecycle -------------------------------------------------
@@ -279,16 +312,14 @@ async def job_ats(job_id: str) -> dict:
 
 
 @app.post("/autopilot/execute/apply")
-async def execute_apply(payload: dict) -> dict:
+async def execute_apply(payload: ExecuteApplyRequest) -> dict:
     """Execute an application for a discovered job in a visible browser.
 
     By default does NOT auto-submit: the browser is left open for the user to
     review and confirm. Requires an active LinkedIn session for Easy Apply.
     """
-    job_id = str(payload.get("job_id", ""))
-    auto_submit = bool(payload.get("auto_submit", False))
-    if not job_id:
-        raise HTTPException(status_code=400, detail="job_id is required")
+    job_id = payload.job_id
+    auto_submit = payload.auto_submit
 
     row = await get_db().fetch_one(
         """

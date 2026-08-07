@@ -94,39 +94,43 @@ async def execute_approved_actions(
         if action.action_type not in ("connect", "message"):
             continue
 
-        ok, reason = await can_perform(
-            db, action.action_type, max_connections, max_messages, max_applies
-        )
-        if not ok:
-            await qm.update_status(action.id, "skipped")
-            results["skipped"] += 1
-            logger.info("Skipped action %d: %s", action.id, reason)
-            continue
+        async with db.transaction():
+            ok, reason = await can_perform(
+                db, action.action_type, max_connections, max_messages, max_applies
+            )
+            if not ok:
+                await qm.update_status(action.id, "skipped")
+                results["skipped"] += 1
+                logger.info("Skipped action %d: %s", action.id, reason)
+                continue
 
-        text = action.content_final or action.content_draft
-        profile_id = _profile_id_from_url(action.target_profile_url)
+            text = action.content_final or action.content_draft
+            profile_id = _profile_id_from_url(action.target_profile_url)
 
-        if action.action_type == "connect":
-            # Record the attempt BEFORE the API call so the daily counter can
-            # never undercount (a sent-but-unrecorded connection would otherwise
-            # let us exceed LinkedIn's limit and risk a ban).
-            await _record_connection(db, action.job_id, action.target_profile_url, text)
-            outcome = await send_connection_request(session, profile_id, text)
-            if outcome.status == "sent":
-                await qm.update_status(action.id, "completed")
-                results["connected"] += 1
-            else:
-                await _unrecord_connection(db, action.job_id, action.target_profile_url)
-                await qm.update_status(action.id, "failed")
-                results["failed"] += 1
-        else:  # message
-            outcome = await send_message(session, profile_id, text)
-            if outcome.status == "sent":
-                await qm.update_status(action.id, "completed")
-                results["messaged"] += 1
-            else:
-                await qm.update_status(action.id, "failed")
-                results["failed"] += 1
+            if action.action_type == "connect":
+                # Record the attempt BEFORE the API call so the daily counter can
+                # never undercount (a sent-but-unrecorded connection would otherwise
+                # let us exceed LinkedIn's limit and risk a ban). Holding the
+                # transaction lock across the whole check+record+call+status
+                # update prevents another concurrent call from reading a stale
+                # daily count in between.
+                await _record_connection(db, action.job_id, action.target_profile_url, text)
+                outcome = await send_connection_request(session, profile_id, text)
+                if outcome.status == "sent":
+                    await qm.update_status(action.id, "completed")
+                    results["connected"] += 1
+                else:
+                    await _unrecord_connection(db, action.job_id, action.target_profile_url)
+                    await qm.update_status(action.id, "failed")
+                    results["failed"] += 1
+            else:  # message
+                outcome = await send_message(session, profile_id, text)
+                if outcome.status == "sent":
+                    await qm.update_status(action.id, "completed")
+                    results["messaged"] += 1
+                else:
+                    await qm.update_status(action.id, "failed")
+                    results["failed"] += 1
 
     return results
 

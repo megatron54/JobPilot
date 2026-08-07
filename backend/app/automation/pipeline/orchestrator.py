@@ -156,16 +156,20 @@ async def _score_all(
         nonlocal done, scored_count
         if state.cancelled:
             return
-        async with sem:
-            result = await score_job(job, profile)
-        await repo.set_score(
-            result.job_id,
-            result.score,
-            result.recommendation,
-            result.match_reasons,
-            result.deal_breakers,
-            result.missing_skills,
-        )
+        try:
+            async with sem:
+                result = await score_job(job, profile)
+            await repo.set_score(
+                result.job_id,
+                result.score,
+                result.recommendation,
+                result.match_reasons,
+                result.deal_breakers,
+                result.missing_skills,
+            )
+        except Exception:
+            logger.exception("Scoring worker failed for job %s", job.get("job_id"))
+            return
         async with lock:
             done += 1
             scored_count += 1
